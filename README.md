@@ -1,0 +1,1 @@
+This is a repository for a final project of the CTFD course. The project is about modeling of water freezing on a surface of a lake (stefan problem). 
