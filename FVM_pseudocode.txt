@@ -1,0 +1,46 @@
+We are solving a following equation: dH/dt = d(kdT)^2/dx^2 + d(kdT)^2/dy^2
+We split the enthalpy into two terms: H = H_s + H_l
+Sensible heat: H_s = c_s * rho_s * T
+Latent heat: H_l = \rho_l * L * f_l
+d(H_s)/dt = c_s * rho_s * dT/dt
+d(H_l)/dt = rho_l * L * d(f_l)/dt
+
+Putting these terms into the equation:
+c_s * rho_s * dT/dt + rho_l * L * d(f_l)/dt = L(kdT) where L(kdT) is the divergence operator
+We treat the latent heat term as a heat source:
+c_s * rho_s * dT/dt = L(kdT) - rho_l * L * d(f_l)/dt
+dT/dt can be discretized using the backward-Euler scheme, the same way as d(f_l)/dt. 
+L(kdT) is discretized using the FVM. 
+(T^(n+1) - T^n)/dt - AT^(n+1) = - b - (f_l^(n+1) - f_l^n)/dt
+b contains boundary conditions and source terms.
+
+We are dealing with two fields at the same time: temperature and liquid fraction field. In order to solve the above equation we need to first guess the 
+the liquid fraction field, then compute the temperature field and use that to compute the fraction field. We need to do that over and over again
+until we reach convergence for one time step. 
+=========================================================================================================================================================
+time_steps_to_save = np.linspace(0, max(time_steps), 1000)
+T_field_ev = np.zeros([len(time_steps_to_save), *mesh.shape])
+fl_field_ev = T_field_ev.copy()
+
+# Initial conditions
+T_field_init = np.ones([*mesh.shape]) * Td
+fl_field_init = np.zeros([*mesh.shape])
+fl_field_future = fl_field_init + 0.01
+
+for time_step in time_steps:
+    A, b = self.fvm()
+    while True:
+        b_star = T_field_init - b*dt - (fl_field_future - fl_field_init)
+        A_star = (np.eye(n) - dt * A) 
+        T_field_future = self.iterative_solve(A_star, b_star, 'SOR')
+        fl_field_future = - b + A @ T_field_future * dt - (T_field_future - T_field_init) + fl_field_init
+        if np.abs(T_field_future - T_field_init) smaller then tolerance:
+            T_field_init = T_field_future
+            fl_field_init = fl_field_future
+            break
+        if step in time_steps_to_save:
+            save step
+
+
+
+
