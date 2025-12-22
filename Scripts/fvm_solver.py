@@ -963,9 +963,11 @@ class DiffFVM():
     
 class ConvectiveFVM(DiffFVM):
     
-    def __init__(self, X, Y, boundary=[], TD=[], q=0, alpha=0, Tinf=0, velocity_field=None):
+    def __init__(self, X, Y, boundary=[], TD=[], q=0, alpha=0, Tinf=0, velocity_field=None, rho_field=None, cp_field=None):
         super().__init__(X, Y, boundary, TD, q, alpha, Tinf)
         self.velocity_field = velocity_field  # velocity_field should be an array indexed by (x,y) and returning (vx, vy)
+        self.rho = rho_field  # rho_field should be an array indexed by (x,y) and returning density at that point
+        self.cp = cp_field  # cp_field should be an array indexed by (x,y) and returning specific heat at that point
         
     def build_inner(self, i, j):
         stencil = np.zeros(self.n*self.m)
@@ -1034,75 +1036,52 @@ class ConvectiveFVM(DiffFVM):
         
         # calculate the area of the cell
         S_P = calculate_area(ne, se, sw, nw)
-        S_n = calculate_area(Ne, e, w, Nw)
-        S_s = calculate_area(e, Se, Sw, w)
-        S_w = calculate_area(n, s, sW, nW)
-        S_e = calculate_area(nE, sE, s, n)
 
-        D3 = () / S_P
-        D_3 = ((dx(nw, sw) * (dx(n, nW) / 4 + dx(sW, s) / 4 + dx(nW, sW))) / S_w +
-              (dy(nw, sw) * (dy(n, nW) / 4 + dy(sW, s) / 4 + dy(nW, sW))) / S_w +
-              (dx(Nw, w) * dx(ne, nw)) / (4 * S_n) +
-              (dx(w, Sw) * dx(sw, se)) / (4 * S_s) +
-              (dy(Nw, w) * dy(ne, nw)) / (4 * S_n) +
-              (dy(w, Sw) * dy(sw, se)) / (4 * S_s)) / S_P
-        D1 = ((dx(sw, se) * (dx(Se, e) / 4 + dx(w, Sw) / 4 + dx(Sw, Se))) / S_s +
-            (dy(sw, se) * (dy(Se, e) / 4 + dy(w, Sw) / 4 + dy(Sw, Se))) / S_s +
-            (dx(s, sE) * dx(se, ne)) / (4 * S_e) +
-            (dx(sW, s) * dx(nw, sw)) / (4 * S_w) +
-            (dy(s, sE) * dy(se, ne)) / (4 * S_e) +
-            (dy(sW, s) * dy(nw, sw)) / (4 * S_w)) / S_P
+        # Get properties at the cell center
+        rho = self.rho[i, j]
+        cp = self.cp[i, j]
+        
+        # East
+        # x-direction velocity acorss the eastern face
+        eastern_velocity_x = (self.velocity_field[i, j][0] + self.velocity_field[i, j+1][0]) / 2
+        # y-direction velocity acorss the eastern face
+        eastern_velocity_y = (self.velocity_field[i, j][1] + self.velocity_field[i, j+1][1]) / 2
+        F_E = rho * cp * (dy(se, ne) * eastern_velocity_x - dx(se, ne) * eastern_velocity_y)
+        D3 = np.maximum(0, -F_E) / S_P
+        
+        # West
+        # x-direction velocity acorss the western face
+        western_velocity_x = (self.velocity_field[i, j][0] + self.velocity_field[i, j-1][0]) / 2
+        # y-direction velocity acorss the western face
+        western_velocity_y = (self.velocity_field[i, j][1] + self.velocity_field[i, j-1][1]) / 2
+        F_W = rho * cp * (dy(nw, sw) * western_velocity_x - dx(nw, sw) * western_velocity_y)
+        D_3 = np.maximum(0, -F_W) / S_P
+        
+        # South
+        # x-direction velocity acorss the southern face
+        southern_velocity_x = (self.velocity_field[i, j][0] + self.velocity_field[i+1, j][0]) / 2
+        # y-direction velocity acorss the southern face
+        southern_velocity_y = (self.velocity_field[i, j][1] + self.velocity_field[i+1, j][1]) / 2
+        F_S = rho * cp * (dy(sw, se) * southern_velocity_x - dx(sw, se) * southern_velocity_y)
+        D1 = np.maximum(0, -F_S) / S_P
+        
         # North
-        D_1 = ((dx(ne, nw) * (dx(e, Ne) / 4 + dx(Nw, w) / 4 + dx(Ne, Nw))) / S_n +
-            (dy(ne, nw) * (dy(e, Ne) / 4 + dy(Nw, w) / 4 + dy(Ne, Nw))) / S_n +
-            (dx(nE, n) * dx(se, ne)) / (4 * S_e) +
-            (dx(n, nW) * dx(nw, sw)) / (4 * S_w) +
-            (dy(nE, n) * dy(se, ne)) / (4 * S_e) +
-            (dy(n, nW) * dy(nw, sw)) / (4 * S_w)) / S_P
-
-        # NW
-        D_4 = ((dx(Nw, w) * dx(ne, nw)) / (4 * S_n) +
-            (dx(n, nW) * dx(nw, sw)) / (4 * S_w) +
-            (dy(Nw, w) * dy(ne, nw)) / (4 * S_n) +
-            (dy(n, nW) * dy(nw, sw)) / (4 * S_w)) / S_P
-
-        # NE
-        D2 = ((dx(nE, n) * dx(se, ne)) / (4 * S_e) +
-            (dx(e, Ne) * dx(ne, nw)) / (4 * S_n) +
-            (dy(nE, n) * dy(se, ne)) / (4 * S_e) +
-            (dy(e, Ne) * dy(ne, nw)) / (4 * S_n)) / S_P
-
-        # SW
-        D_2 = ((dx(w, Sw) * dx(sw, se)) / (4 * S_s) +
-            (dx(sW, s) * dx(nw, sw)) / (4 * S_w) +
-            (dy(w, Sw) * dy(sw, se)) / (4 * S_s) +
-            (dy(sW, s) * dy(nw, sw)) / (4 * S_w)) / S_P
-
-        # SE
-        D4 = ((dx(s, sE) * dx(se, ne)) / (4 * S_e) +
-            (dx(Se, e) * dx(sw, se)) / (4 * S_s) +
-            (dy(s, sE) * dy(se, ne)) / (4 * S_e) +
-            (dy(Se, e) * dy(sw, se)) / (4 * S_s)) / S_P
+        # x-direction velocity acorss the northern face
+        northern_velocity_x = (self.velocity_field[i, j][0] + self.velocity_field[i-1, j][0]) / 2
+        # y-direction velocity acorss the northern face
+        northern_velocity_y = (self.velocity_field[i, j][1] + self.velocity_field[i-1, j][1]) / 2
+        # Flux across the northern face
+        F_N = rho * cp * (dy(ne, nw) * northern_velocity_x - dx(ne, nw) * northern_velocity_y)
+        D_1 = np.maximum(0, -F_N) / S_P
 
         # Center (P)
-        D0 = ((dx(se, ne) * (dx(n, s) + dx(nE, n) / 4 + dx(s, sE) / 4)) / S_e +
-            (dx(ne, nw) * (dx(w, e) + dx(e, Ne) / 4 + dx(Nw, w) / 4)) / S_n +
-            (dx(sw, se) * (dx(e, w) + dx(Se, e) / 4 + dx(w, Sw) / 4)) / S_s +
-            (dx(nw, sw) * (dx(s, n) + dx(n, nW) / 4 + dx(sW, s) / 4)) / S_w +
-            (dy(se, ne) * (dy(n, s) + dy(nE, n) / 4 + dy(s, sE) / 4)) / S_e +
-            (dy(ne, nw) * (dy(w, e) + dy(e, Ne) / 4 + dy(Nw, w) / 4)) / S_n +
-            (dy(sw, se) * (dy(e, w) + dy(Se, e) / 4 + dy(w, Sw) / 4)) / S_s +
-            (dy(nw, sw) * (dy(s, n) + dy(n, nW) / 4 + dy(sW, s) / 4)) / S_w) / S_P
+        D0 = ( np.maximum(0, F_E) + np.maximum(0, F_W) + np.maximum(0, F_S) + np.maximum(0, F_N) ) / S_P
         
         stencil[index(i, j)] = D0
         stencil[index(i-1, j)] = D_1
         stencil[index(i+1, j)] = D1
         stencil[index(i, j-1)] = D_3
         stencil[index(i, j+1)] = D3
-        stencil[index(i-1, j-1)] = D_4
-        stencil[index(i-1, j+1)] = D2
-        stencil[index(i+1, j-1)] = D_2
-        stencil[index(i+1, j+1)] = D4
-        
+
         return stencil,b
         
