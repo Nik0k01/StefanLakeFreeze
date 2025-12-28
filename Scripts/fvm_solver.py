@@ -29,13 +29,11 @@ def index(i, j):
     return i * dimX + j # Might be wrong
 
 
-
 class Coordinate2D():
     def __init__(self, x, y):
         self.x = x
         self.y = y
     
-
 class DiffFVM():
     """
     Diffusive part of the Finite Volume Method solver for stefan problem
@@ -87,7 +85,6 @@ class DiffFVM():
             a, b = self.build_NW(i, j)
         return a, b
     
-
     def build_inner(self, i, j):
         stencil = np.zeros(self.n*self.m)
         b = 0.0
@@ -592,7 +589,6 @@ class DiffFVM():
 
         return stencil,b
         
-    
     def build_NW(self, i, j):
         stencil = np.zeros(self.n*self.m)
         b = 0.0
@@ -794,7 +790,7 @@ class DiffFVM():
             # calculate areas (Mirrored from SE)
             S_sw = calculate_area(P, n, ne, e) # Main CV
             S_swn = calculate_area(P, N, Ne, e) # North sub-volume
-            S_swe = calculate_area(P, n, nE, R) # East sub-volume
+            S_swe = calculate_area(P, n, nE, E) # East sub-volume
 
             # --- D_1 (North) coefficient (Mirrored from SE's D_1) ---
             D_1 = (dy(e, ne) * (dy(nE, n) / 4 + dy(n, P) / 4) / S_swe + 
@@ -1255,5 +1251,183 @@ class ConvectiveFVM(DiffFVM):
         stencil[index(i-1, j)] = -D_1
         stencil[index(i, j-1)] = -D_3
         stencil[index(i, j+1)] = -D3
+
+        return stencil,b
+    
+    def build_east(self, i, j):
+        stencil = np.zeros(self.n*self.m)
+        b = 0.0
+        # 1. Handle Dirichlet (Fixed Temperature Wall/Inlet)
+        if self.boundary[3] == 'D':
+            stencil[index(i, j)] = 1.0
+            b = self.TD[3]
+            return stencil, b
+    
+        # 2. General Flux Handling (Neumann / Mixed / Wall)
+        # principle node coordinate
+        P = Coordinate2D(self.X[i, j], self.Y[i, j])
+        S = Coordinate2D(self.X[i+1, j], self.Y[i+1, j])
+        W = Coordinate2D(self.X[i, j-1], self.Y[i, j-1])
+        N = Coordinate2D(self.X[i-1, j], self.Y[i-1, j])
+        SW = Coordinate2D(self.X[i+1, j-1], self.Y[i+1, j-1])
+        NW = Coordinate2D(self.X[i-1, j-1], self.Y[i-1, j-1])
+
+        # auxiliary node coordinate
+        sW = Coordinate2D((W.x + SW.x)/2, (W.y + SW.y)/2)
+        nW = Coordinate2D((W.x + NW.x)/2, (W.y + NW.y)/2)
+
+        s = Coordinate2D((S.x + P.x)/2, (S.y + P.y)/2)
+        n = Coordinate2D((N.x + P.x)/2, (N.y + P.y)/2)
+
+        nw = Coordinate2D((nW.x + n.x)/2, (nW.y + n.y)/2)
+        sw = Coordinate2D((sW.x + s.x)/2, (sW.y + s.y)/2)
+
+        # calculate the area of the cell
+        S_ee = calculate_area(s, sw, nw, n)
+        
+        # Get properties at the cell center
+        rho = self.rho[i, j]
+        cp = self.cp[i, j]
+
+        # North
+        # x-direction velocity acorss the northern face
+        northern_velocity_x = (self.velocity_field[i, j][0] + self.velocity_field[i+1, j][0]) / 2
+        # y-direction velocity acorss the northern face
+        northern_velocity_y = (self.velocity_field[i, j][1] + self.velocity_field[i+1, j][1]) / 2
+        F_N = rho * cp * (dy(n, nw) * northern_velocity_x - dx(n, nw) * northern_velocity_y)
+        D_1 = np.maximum(0, -F_N) / S_ee
+        
+        # South
+        # x-direction velocity acorss the southern face
+        southern_velocity_x = (self.velocity_field[i, j][0] + self.velocity_field[i+1, j][0]) / 2
+        # y-direction velocity acorss the southern face
+        southern_velocity_y = (self.velocity_field[i, j][1] + self.velocity_field[i+1, j][1]) / 2
+        F_S = rho * cp * (dy(sw, s) * southern_velocity_x - dx(sw, s) * southern_velocity_y)
+        D1 = np.maximum(0, -F_S) / S_ee
+
+        # West
+        # x-direction velocity acorss the western face
+        western_velocity_x = (self.velocity_field[i, j][0] + self.velocity_field[i, j-1][0]) / 2
+        # y-direction velocity acorss the western face
+        western_velocity_y = (self.velocity_field[i, j][1] + self.velocity_field[i, j-1][1]) / 2
+        F_W = rho * cp * (dy(nw, sw) * western_velocity_x - dx(nw, sw) * western_velocity_y)
+        D_3 = np.maximum(0, -F_W) / S_ee
+
+        # --- EAST FACE (The Boundary) ---
+        # We need the velocity AT the boundary line (s -> n).
+        # If No-Slip: u_north = 0. 
+        # If Outflow: u_north = extrapolated or specified.
+        eastern_velocity_x = self.velocity_field[i, j][0] # Or specific boundary array
+        eastern_velocity_y = self.velocity_field[i, j][1] 
+        # Flux
+        F_E = rho * cp * (dy(s, n) * eastern_velocity_x - dx(s, n) * eastern_velocity_y)
+        
+        # --- RHS Source (Inlet Case) ---
+        # If F_E < 0 (Inflow), we are bringing in enthalpy from outside.
+        # We need the temperature of that incoming fluid (T_inf or T_boundary).
+        if F_E < 0:
+            T_inlet = self.TD[0] # Assuming boundary temp is stored here
+            b += (-F_E * T_inlet) / S_ee
+        
+        # Center (P)
+        D0 = (np.maximum(0, F_E) + 
+            np.maximum(0, F_W) + 
+            np.maximum(0, F_S) +
+            np.maximum(0, F_N)) / S_ee
+
+        stencil[index(i, j)] = D0
+        stencil[index(i-1, j)] = D_1
+        stencil[index(i+1, j)] = D1
+        stencil[index(i, j-1)] = D_3
+
+        return stencil,b  
+    
+    def build_west(self, i, j):
+        stencil = np.zeros(self.n*self.m)
+        b = 0.0
+        # 1. Handle Dirichlet (Fixed Temperature Wall/Inlet)
+        if self.boundary[2] == 'D':  # Using index 2 for west boundary
+            stencil[index(i, j)] = 1.0
+            b = self.TD[2]
+            return stencil, b
+        # 2. General Flux Handling (Neumann / Mixed / Wall)
+        # principle node coordinate
+        P = Coordinate2D(self.X[i, j], self.Y[i, j])
+        S = Coordinate2D(self.X[i+1, j], self.Y[i+1, j])
+        N = Coordinate2D(self.X[i-1, j], self.Y[i-1, j])
+        E = Coordinate2D(self.X[i, j+1], self.Y[i, j+1])
+        SE = Coordinate2D(self.X[i+1, j+1], self.Y[i+1, j+1])
+        NE = Coordinate2D(self.X[i-1, j+1], self.Y[i-1, j+1])
+
+        # auxiliary node coordinate
+        Se = Coordinate2D((S.x + SE.x)/2, (S.y + SE.y)/2)
+        Ne = Coordinate2D((N.x + NE.x)/2, (N.y + NE.y)/2)
+        sE = Coordinate2D((E.x + SE.x)/2, (E.y + SE.y)/2)
+        nE = Coordinate2D((E.x + NE.x)/2, (E.y + NE.y)/2)
+
+        s = Coordinate2D((S.x + P.x)/2, (S.y + P.y)/2)
+        n = Coordinate2D((N.x + P.x)/2, (N.y + P.y)/2)
+        e = Coordinate2D((E.x + P.x)/2, (E.y + P.y)/2)
+
+        ne = Coordinate2D((Ne.x + e.x)/2, (Ne.y + e.y)/2)
+        se = Coordinate2D((Se.x + e.x)/2, (Se.y + e.y)/2)
+
+        # calculate the area of the cell
+        S_ww = calculate_area(s, n, ne, se)
+        
+        # Get properties at the cell center
+        rho = self.rho[i, j]
+        cp = self.cp[i, j]
+
+        # North
+        # x-direction velocity acorss the northern face
+        northern_velocity_x = (self.velocity_field[i, j][0] + self.velocity_field[i+1, j][0]) / 2
+        # y-direction velocity acorss the northern face
+        northern_velocity_y = (self.velocity_field[i, j][1] + self.velocity_field[i+1, j][1]) / 2
+        F_N = rho * cp * (dy(ne, n) * northern_velocity_x - dx(ne, n) * northern_velocity_y)
+        D_1 = np.maximum(0, -F_N) / S_ww
+        
+        # South
+        # x-direction velocity acorss the southern face
+        southern_velocity_x = (self.velocity_field[i, j][0] + self.velocity_field[i+1, j][0]) / 2
+        # y-direction velocity acorss the southern face
+        southern_velocity_y = (self.velocity_field[i, j][1] + self.velocity_field[i+1, j][1]) / 2
+        F_S = rho * cp * (dy(s, se) * southern_velocity_x - dx(s, se) * southern_velocity_y)
+        D1 = np.maximum(0, -F_S) / S_ww
+        
+        # East
+        # x-direction velocity acorss the eastern face
+        eastern_velocity_x = (self.velocity_field[i, j][0] + self.velocity_field[i, j+1][0]) / 2
+        # y-direction velocity acorss the eastern face
+        eastern_velocity_y = (self.velocity_field[i, j][1] + self.velocity_field[i, j+1][1]) / 2
+        F_E = rho * cp * (dy(se, ne) * eastern_velocity_x - dx(se, ne) * eastern_velocity_y)
+        D3 = np.maximum(0, -F_E) / S_ww
+        
+        # --- WEST FACE (The Boundary) ---
+        # We need the velocity AT the boundary line (n -> s).
+        # If No-Slip: u_north = 0. 
+        # If Outflow: u_north = extrapolated or specified.
+        western_velocity_x = self.velocity_field[i, j][0] # Or specific boundary array
+        western_velocity_y = self.velocity_field[i, j][1] 
+        # Flux
+        F_W = rho * cp * (dy(n, s) * western_velocity_x - dx(n, s) * western_velocity_y)
+        
+        # --- RHS Source (Inlet Case) ---
+        # If F_W < 0 (Inflow), we are bringing in enthalpy from outside.
+        # We need the temperature of that incoming fluid (T_inf or T_boundary).
+        if F_W < 0:
+            T_inlet = self.TD[0] # Assuming boundary temp is stored here
+            b += (-F_W * T_inlet) / S_ww
+        
+        # Center (P)
+        D0 = (np.maximum(0, F_E) + 
+            np.maximum(0, F_W) + 
+            np.maximum(0, F_S) +
+            np.maximum(0, F_N)) / S_ww
+        
+        stencil[index(i, j)] = D0
+        stencil[index(i-1, j)] = D_1
+        stencil[index(i+1, j)] = D1
+        stencil[index(i, j+1)] = D3
 
         return stencil,b
