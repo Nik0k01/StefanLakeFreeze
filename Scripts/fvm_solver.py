@@ -26,7 +26,7 @@ def dist(a, b):
 
 def index(i, j):
     # Return the index in the computational vector based on the physical indices 'i', 'j' and dimX (global parameter)
-    return i * dimX + j # Might be wrong
+    return i * dimX + j 
 
 
 class Coordinate2D():
@@ -38,7 +38,7 @@ class DiffFVM():
     """
     Diffusive part of the Finite Volume Method solver for stefan problem
     """
-    def __init__(self, X, Y, boundary=[], TD=[], q=0.0, alpha=0.0, Tinf=0.0):
+    def __init__(self, X, Y, boundary=[], TD=[], q=0.0, alpha=0.0, Tinf=0.0, conductivity=None):
         # i, j is the index of the cell
         # X, Y is the mesh
         # boundary is the boundary condition: "R", "D", "N"
@@ -54,6 +54,7 @@ class DiffFVM():
         self.q = q
         self.alpha = alpha
         self.Tinf = Tinf
+        self.lambda_coeff = conductivity  # thermal conductivity
 
         # n is the number of points in the first direction
         # m is the number of points in the second direction
@@ -156,6 +157,7 @@ class DiffFVM():
         S_s = calculate_area(e, Se, Sw, w)
         S_w = calculate_area(n, s, sW, nW)
         S_e = calculate_area(nE, sE, s, n)
+        
 
         D3 = ((dx(se, ne) * (dx(nE, n)/4 + dx(s, sE)/4 + dx(sE, nE))) / S_e + 
              (dy(se, ne) * (dy(nE, n)/4 + dy(s, sE)/4 + dy(sE, nE))) / S_e + 
@@ -224,6 +226,7 @@ class DiffFVM():
         stencil[index(i-1, j+1)] = D2
         stencil[index(i+1, j-1)] = D_2
         stencil[index(i+1, j+1)] = D4
+        stencil *= self.lambda_coeff[i, j]
         
         return stencil,b
         
@@ -261,6 +264,8 @@ class DiffFVM():
             S_ssw = calculate_area(P, s, sW, W)
             S_sse = calculate_area(E, sE, s, P)
 
+            
+            
             # East
             D3 = (dy(sw, se) * (dy(Se, e) / 4) / S_s + dx(sw, se) * (dx(Se, e) / 4) / S_s +
                 dy(se, e) * (dy(s, sE) / 4 + 3 * dy(sE, E) / 4 + dy(E, P) / 2) / S_sse +
@@ -313,6 +318,7 @@ class DiffFVM():
             stencil[index(i, j+1)] = D3
             stencil[index(i+1, j-1)] = D_2
             stencil[index(i+1, j+1)] = D4
+            stencil *= self.lambda_coeff[i, j]
 
         return stencil,b
     
@@ -402,6 +408,7 @@ class DiffFVM():
             stencil[index(i, j+1)] = D3
             stencil[index(i-1, j-1)] = D2
             stencil[index(i-1, j+1)] = D_4
+            stencil *= self.lambda_coeff[i, j]
 
         return stencil,b
          
@@ -497,6 +504,7 @@ class DiffFVM():
             stencil[index(i, j-1)] = D_3
             stencil[index(i-1, j-1)] = D_4
             stencil[index(i+1, j-1)] = D_2
+            stencil *= self.lambda_coeff[i, j]
 
         return stencil,b        
     
@@ -586,6 +594,7 @@ class DiffFVM():
             stencil[index(i, j+1)] = D3
             stencil[index(i-1, j+1)] = D2
             stencil[index(i+1, j+1)] = D4
+            stencil *= self.lambda_coeff[i, j]
 
         return stencil,b
         
@@ -674,6 +683,7 @@ class DiffFVM():
             stencil[index(i+1, j)] = D1
             stencil[index(i, j+1)] = D3
             stencil[index(i+1, j+1)] = D4
+            stencil *= self.lambda_coeff[i, j]
 
         return stencil, b
     
@@ -760,6 +770,7 @@ class DiffFVM():
             stencil[index(i+1, j)] = D1
             stencil[index(i, j-1)] = D_3
             stencil[index(i+1, j-1)] = D_2
+            stencil *= self.lambda_coeff[i, j]
 
         return stencil, b
     
@@ -848,6 +859,7 @@ class DiffFVM():
             stencil[index(i-1, j)] = D_1
             stencil[index(i, j+1)] = D3
             stencil[index(i-1, j+1)] = D2 # Corresponds to NE node
+            stencil *= self.lambda_coeff[i, j]
 
         return stencil, b
     
@@ -942,25 +954,14 @@ class DiffFVM():
             stencil[index(i-1, j)] = D_1
             stencil[index(i, j-1)] = D_3
             stencil[index(i-1, j-1)] = D_4
+            stencil *= self.lambda_coeff[i, j]
 
         return stencil, b
-    
-    def solve(self):
-        for i in range(self.m):
-            for j in range(self.n):
-                # Set stencil for the node
-                k = index(i, j)
-                a, b = self.set_stencil(i, j)
-                self.A[k, :] = a
-                self.B[k] = b
-        T = np.linalg.solve(self.A, self.B)        
-        
-        return T.reshape(dimY, dimX)
-    
+       
 class ConvectiveFVM(DiffFVM):
     
-    def __init__(self, X, Y, boundary=[], TD=[], q=0, alpha=0, Tinf=0, velocity_field=None, rho_field=None, cp_field=None):
-        super().__init__(X, Y, boundary, TD, q, alpha, Tinf)
+    def __init__(self, X, Y, boundary=[], TD=[], q=0, alpha=0, Tinf=0, conductivity=None, velocity_field=None, rho_field=None, cp_field=None):
+        super().__init__(X, Y, boundary, TD, q, alpha, Tinf, conductivity)
         self.velocity_field = velocity_field  # velocity_field should be an array indexed by (x,y) and returning (vx, vy)
         self.rho = rho_field  # rho_field should be an array indexed by (x,y) and returning density at that point
         self.cp = cp_field  # cp_field should be an array indexed by (x,y) and returning specific heat at that point
@@ -1809,4 +1810,23 @@ class ConvectiveFVM(DiffFVM):
         stencil[index(i, j-1)] = -D_3  # West (j-1)
 
         return stencil, b
-    
+ 
+class FVMSolver:
+    def __init__(self, X, Y, boundary=[], TD=[], q=0, alpha=0, Tinf=0, conductivity=None, velocity_field=None, rho_field=None, cp_field=None):
+        self.diffFVM = DiffFVM(X, Y, boundary, TD, q, alpha, Tinf, conductivity)
+        self.convFVM = ConvectiveFVM(X, Y, boundary, TD, q, alpha, Tinf, conductivity, velocity_field, rho_field, cp_field)
+        
+    def solve(self):
+        for i in range(self.m):
+            for j in range(self.n):
+                # Set stencil for the node
+                k = index(i, j)
+                a_diff, b_diff = self.diffFVM.set_stencil(i, j)
+                a_conv, b_conv = self.convFVM.set_stencil(i, j)
+                self.A[k, :] = a_diff + a_conv
+                self.B[k] = b_diff + b_conv
+        T = np.linalg.solve(self.A, self.B)        
+        
+        return T.reshape(dimY, dimX)
+
+       
