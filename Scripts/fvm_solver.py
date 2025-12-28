@@ -1085,3 +1085,91 @@ class ConvectiveFVM(DiffFVM):
 
         return stencil,b
         
+    def build_north(self, i, j):
+        stencil = np.zeros(self.n*self.m)
+        b = 0.0
+        # 1. Handle Dirichlet (Fixed Temperature Wall/Inlet)
+        if self.boundary[0] == 'D':
+            stencil[index(i, j)] = 1.0
+            b = self.TD[0]
+            return stencil, b
+    
+        # 2. General Flux Handling (Neumann / Mixed / Wall)
+        
+        # principle node coordinate
+        P = Coordinate2D(self.X[i, j], self.Y[i, j])
+        S = Coordinate2D(self.X[i+1, j], self.Y[i+1, j])
+        W = Coordinate2D(self.X[i, j-1], self.Y[i, j-1])
+        E = Coordinate2D(self.X[i, j+1], self.Y[i, j+1])
+        SW = Coordinate2D(self.X[i+1, j-1], self.Y[i+1, j-1])
+        SE = Coordinate2D(self.X[i+1, j+1], self.Y[i+1, j+1])
+
+        # auxiliary node coordinate
+        Sw = Coordinate2D((S.x + SW.x)/2, (S.y + SW.y)/2)
+        Se = Coordinate2D((S.x + SE.x)/2, (S.y + SE.y)/2)
+
+        w = Coordinate2D((W.x + P.x)/2, (W.y + P.y)/2)
+        e = Coordinate2D((E.x + P.x)/2, (E.y + P.y)/2)
+
+        se = Coordinate2D((Se.x + e.x)/2, (Se.y + e.y)/2)
+        sw = Coordinate2D((Sw.x + w.x)/2, (Sw.y + w.y)/2)
+
+        # calculate the area of the cell
+        S_ss = calculate_area(e, se, sw, w)
+
+        # Get properties at the cell center
+        rho = self.rho[i, j]
+        cp = self.cp[i, j]
+
+        # East
+        # x-direction velocity acorss the eastern face
+        eastern_velocity_x = (self.velocity_field[i, j][0] + self.velocity_field[i, j+1][0]) / 2
+        # y-direction velocity acorss the eastern face
+        eastern_velocity_y = (self.velocity_field[i, j][1] + self.velocity_field[i, j+1][1]) / 2
+        F_E = rho * cp * (dy(se, e) * eastern_velocity_x - dx(se, e) * eastern_velocity_y)
+        D3 = np.maximum(0, -F_E) / S_ss
+
+        # West
+        # x-direction velocity acorss the western face
+        western_velocity_x = (self.velocity_field[i, j][0] + self.velocity_field[i, j-1][0]) / 2
+        # y-direction velocity acorss the western face
+        western_velocity_y = (self.velocity_field[i, j][1] + self.velocity_field[i, j-1][1]) / 2
+        F_W = rho * cp * (dy(w, sw) * western_velocity_x - dx(w, sw) * western_velocity_y)
+        D_3 = np.maximum(0, -F_W) / S_ss
+
+        # South
+        # x-direction velocity acorss the southern face
+        southern_velocity_x = (self.velocity_field[i, j][0] + self.velocity_field[i+1, j][0]) / 2
+        # y-direction velocity acorss the southern face
+        southern_velocity_y = (self.velocity_field[i, j][1] + self.velocity_field[i+1, j][1]) / 2
+        F_S = rho * cp * (dy(sw, se) * southern_velocity_x - dx(sw, se) * southern_velocity_y)
+        D1 = np.maximum(0, -F_S) / S_ss
+
+        # --- NORTH FACE (The Boundary) ---
+        # We need the velocity AT the boundary line (ne -> nw).
+        # If No-Slip: u_north = 0. 
+        # If Outflow: u_north = extrapolated or specified.
+        northern_velocity_x = self.velocity_field[i, j][0] # Or specific boundary array
+        northern_velocity_y = self.velocity_field[i, j][1] 
+        # Flux
+        F_N = rho * cp * (dy(e, w) * northern_velocity_x - dx(e, w) * northern_velocity_y)
+        
+        # Center (P)
+        D0 = (np.maximum(0, F_E) + 
+              np.maximum(0, F_W) + 
+              np.maximum(0, F_S) +
+              np.maximum(0, F_N)) / S_ss
+        
+        # --- RHS Source (Inlet Case) ---
+        # If F_N < 0 (Inflow), we are bringing in enthalpy from outside.
+        # We need the temperature of that incoming fluid (T_inf or T_boundary).
+        if F_N < 0:
+            T_inlet = self.TD[0] # Assuming boundary temp is stored here
+            b += (-F_N * T_inlet) / S_ss
+        
+        stencil[index(i, j)] = D0
+        stencil[index(i+1, j)] = D1
+        stencil[index(i, j-1)] = D_3
+        stencil[index(i, j+1)] = D3
+ 
+        return stencil,b
