@@ -1336,9 +1336,9 @@ class ConvectiveFVM(DiffFVM):
             np.maximum(0, F_N)) / S_ee
 
         stencil[index(i, j)] = D0
-        stencil[index(i-1, j)] = D_1
-        stencil[index(i+1, j)] = D1
-        stencil[index(i, j-1)] = D_3
+        stencil[index(i-1, j)] = -D_1
+        stencil[index(i+1, j)] = -D1
+        stencil[index(i, j-1)] = -D_3
 
         return stencil,b  
     
@@ -1362,8 +1362,6 @@ class ConvectiveFVM(DiffFVM):
         # auxiliary node coordinate
         Se = Coordinate2D((S.x + SE.x)/2, (S.y + SE.y)/2)
         Ne = Coordinate2D((N.x + NE.x)/2, (N.y + NE.y)/2)
-        sE = Coordinate2D((E.x + SE.x)/2, (E.y + SE.y)/2)
-        nE = Coordinate2D((E.x + NE.x)/2, (E.y + NE.y)/2)
 
         s = Coordinate2D((S.x + P.x)/2, (S.y + P.y)/2)
         n = Coordinate2D((N.x + P.x)/2, (N.y + P.y)/2)
@@ -1426,8 +1424,389 @@ class ConvectiveFVM(DiffFVM):
             np.maximum(0, F_N)) / S_ww
         
         stencil[index(i, j)] = D0
-        stencil[index(i-1, j)] = D_1
-        stencil[index(i+1, j)] = D1
-        stencil[index(i, j+1)] = D3
+        stencil[index(i-1, j)] = -D_1
+        stencil[index(i+1, j)] = -D1
+        stencil[index(i, j+1)] = -D3
 
         return stencil,b
+    
+    def build_NW(self, i, j):
+        stencil = np.zeros(self.n*self.m)
+        b = 0.0
+        
+        # For NW corner, we need to consider both North and West boundary conditions
+        if self.boundary[0] == 'D' or self.boundary[2] == 'D':  # If either boundary is Dirichlet
+            stencil[index(i, j)] = 1.0
+            b = self.TD[0] if self.boundary[0] == 'D' else self.TD[2]
+            return stencil, b
+        # principle node coordinates
+        P = Coordinate2D(self.X[i, j], self.Y[i, j])
+        S = Coordinate2D(self.X[i+1, j], self.Y[i+1, j])
+        E = Coordinate2D(self.X[i, j+1], self.Y[i, j+1])
+        SE = Coordinate2D(self.X[i+1, j+1], self.Y[i+1, j+1])
+
+        # auxiliary node coordinates (Mirrored from NE)
+        Se = Coordinate2D((S.x + SE.x)/2, (S.y + SE.y)/2)
+        sE = Coordinate2D((E.x + SE.x)/2, (E.y + SE.y)/2)
+        s = Coordinate2D((S.x + P.x)/2, (S.y + P.y)/2)
+        e = Coordinate2D((E.x + P.x)/2, (E.y + P.y)/2)
+        
+        # --- Consistent se definition (Mirrored from NE's sw) ---
+        se = Coordinate2D((sE.x + s.x)/2, (sE.y + s.y)/2)
+
+        # calculate areas (Mirrored from NE)
+        S_nw = calculate_area(e, se, s, P) # Main CV 
+        
+        # Get properties at the cell center
+        rho = self.rho[i, j]
+        cp = self.cp[i, j]
+        
+        # South
+        # x-direction velocity acorss the southern face
+        southern_velocity_x = (self.velocity_field[i, j][0] + self.velocity_field[i+1, j][0]) / 2
+        # y-direction velocity acorss the southern face
+        southern_velocity_y = (self.velocity_field[i, j][1] + self.velocity_field[i+1, j][1]) / 2
+        F_S = rho * cp * (dy(s, se) * southern_velocity_x - dx(s, se) * southern_velocity_y)
+        D1 = np.maximum(0, -F_S) / S_nw
+        
+        # East
+        # x-direction velocity acorss the eastern face
+        eastern_velocity_x = (self.velocity_field[i, j][0] + self.velocity_field[i, j+1][0]) / 2
+        # y-direction velocity acorss the eastern face
+        eastern_velocity_y = (self.velocity_field[i, j][1] + self.velocity_field[i, j+1][1]) / 2
+        F_E = rho * cp * (dy(se, e) * eastern_velocity_x - dx(se, e) * eastern_velocity_y)
+        D3 = np.maximum(0, -F_E) / S_nw
+
+        # --- WEST FACE (The Boundary) ---
+        # We need the velocity AT the boundary line (n -> s).
+        # If No-Slip: u_north = 0. 
+        # If Outflow: u_north = extrapolated or specified.
+        western_velocity_x = self.velocity_field[i, j][0] # Or specific boundary array
+        western_velocity_y = self.velocity_field[i, j][1] 
+        # Flux
+        F_W = rho * cp * (dy(P, s) * western_velocity_x - dx(P, s) * western_velocity_y)
+
+        # --- NORTH FACE (The Boundary) ---
+        # We need the velocity AT the boundary line (ne -> nw).
+        # If No-Slip: u_north = 0. 
+        # If Outflow: u_north = extrapolated or specified.
+        northern_velocity_x = self.velocity_field[i, j][0] # Or specific boundary array
+        northern_velocity_y = self.velocity_field[i, j][1] 
+        # Flux
+        F_N = rho * cp * (dy(e, P) * northern_velocity_x - dx(e, P) * northern_velocity_y)
+
+        # RHS
+        b_w = 0.0
+        b_n = 0.0
+        if F_W < 0:
+            T_inlet = self.TD[2] # Assuming boundary temp is stored here
+            b_w += (-F_W * T_inlet) / S_nw
+            
+        if F_N < 0:
+            T_inlet = self.TD[0] # Assuming boundary temp is stored here
+            b_n += (-F_N * T_inlet) / S_nw
+
+        b += b_w + b_n
+        # --- D0 (Center) coefficient ---
+        D0 = (np.maximum(0, F_E) + 
+            np.maximum(0, F_W) + 
+            np.maximum(0, F_S) +
+            np.maximum(0, F_N)) / S_nw
+
+
+        # Assemble the stencil
+        stencil[index(i, j)] = D0
+        stencil[index(i+1, j)] = -D1
+        stencil[index(i, j+1)] = -D3
+
+        return stencil, b
+    
+    def build_NE(self, i, j):
+        stencil = np.zeros(self.n * self.m)
+        b = 0.0
+        
+        # 1. DIRICHLET OVERRIDE (Fixed Temperature)
+        # Check North (0) and East (3)
+        if self.boundary[0] == 'D' or self.boundary[3] == 'D': 
+            stencil[index(i, j)] = 1.0
+            # Prioritize North, else East
+            b = self.TD[0] if self.boundary[0] == 'D' else self.TD[3]
+            return stencil, b
+
+        # 2. GEOMETRY SETUP
+        # Principle node coordinates
+        P = Coordinate2D(self.X[i, j], self.Y[i, j])
+        S = Coordinate2D(self.X[i+1, j], self.Y[i+1, j])
+        W = Coordinate2D(self.X[i, j-1], self.Y[i, j-1])     # Changed from E to W
+        SW = Coordinate2D(self.X[i+1, j-1], self.Y[i+1, j-1]) # Changed from SE to SW
+
+        # Auxiliary node coordinates
+        s = Coordinate2D((S.x + P.x)/2, (S.y + P.y)/2)
+        w = Coordinate2D((W.x + P.x)/2, (W.y + P.y)/2)
+        Sw = Coordinate2D((S.x + SW.x)/2, (S.y + SW.y)/2)
+        sW = Coordinate2D((W.x + SW.x)/2, (W.y + SW.y)/2)
+        
+        # sw is the center of the geometric quadrant (Mirrored from NW's se)
+        sw = Coordinate2D((Sw.x + w.x)/2, (Sw.y + w.y)/2)
+
+        # Calculate Area
+        # Loop CCW: P -> w -> sw -> s
+        S_ne = abs(calculate_area(P, w, sw, s))
+        
+        # Get properties
+        rho = self.rho[i, j]
+        cp = self.cp[i, j]
+        
+        # --- FLUX CALCULATIONS (CCW Loop) ---
+        
+        # 1. WEST FACE (Internal Neighbor)
+        # Path: w -> sw (Down). Normal: Left.
+        western_velocity_x = (self.velocity_field[i, j][0] + self.velocity_field[i, j-1][0]) / 2
+        western_velocity_y = (self.velocity_field[i, j][1] + self.velocity_field[i, j-1][1]) / 2
+        F_W = rho * cp * (dy(w, sw) * western_velocity_x - dx(w, sw) * western_velocity_y)
+        D_3 = np.maximum(0, -F_W) / S_ne  # Inflow contributes to neighbor coeff
+        
+        # 2. SOUTH FACE (Internal Neighbor)
+        # Path: sw -> s (Right). Normal: Down.
+        southern_velocity_x = (self.velocity_field[i, j][0] + self.velocity_field[i+1, j][0]) / 2
+        southern_velocity_y = (self.velocity_field[i, j][1] + self.velocity_field[i+1, j][1]) / 2
+        F_S = rho * cp * (dy(sw, s) * southern_velocity_x - dx(sw, s) * southern_velocity_y)
+        D1 = np.maximum(0, -F_S) / S_ne   # Inflow contributes to neighbor coeff
+
+        # 3. EAST FACE (Boundary)
+        # Path: s -> P (Up). Normal: Right.
+        eastern_velocity_x = self.velocity_field[i, j][0]
+        eastern_velocity_y = self.velocity_field[i, j][1]
+        F_E = rho * cp * (dy(s, P) * eastern_velocity_x - dx(s, P) * eastern_velocity_y)
+
+        # 4. NORTH FACE (Boundary)
+        # Path: P -> w (Left). Normal: Up.
+        northern_velocity_x = self.velocity_field[i, j][0]
+        northern_velocity_y = self.velocity_field[i, j][1]
+        F_N = rho * cp * (dy(P, w) * northern_velocity_x - dx(P, w) * northern_velocity_y)
+
+        # --- SOURCE TERMS & RHS ---
+        b_e = 0.0
+        b_n = 0.0
+
+        # East Inlet Logic (Boundary 3)
+        if F_E < 0:
+            T_inlet_E = self.TD[3] 
+            b_e = (-F_E * T_inlet_E) / S_ne
+            
+        # North Inlet Logic (Boundary 0)
+        if F_N < 0:
+            T_inlet_N = self.TD[0] 
+            b_n = (-F_N * T_inlet_N) / S_ne
+
+        b += b_e + b_n
+
+        # --- CENTER COEFFICIENT (D0) ---
+        # Sum of all Outflows (Positive Fluxes)
+        D0 = (np.maximum(0, F_E) + 
+            np.maximum(0, F_W) + 
+            np.maximum(0, F_S) +
+            np.maximum(0, F_N)) / S_ne
+
+        # --- ASSEMBLE STENCIL ---
+        stencil[index(i, j)] = D0
+        
+        # Negative Neighbors on LHS
+        stencil[index(i+1, j)] = -D1  # South (i+1)
+        stencil[index(i, j-1)] = -D_3 # West (j-1)
+
+        return stencil, b
+    
+    def build_SW(self, i, j):
+        stencil = np.zeros(self.n * self.m)
+        b = 0.0
+        
+        # 1. DIRICHLET OVERRIDE
+        # Check South (1) and West (2)
+        if self.boundary[1] == 'D' or self.boundary[2] == 'D': 
+            stencil[index(i, j)] = 1.0
+            # Prioritize South, else West
+            b = self.TD[1] if self.boundary[1] == 'D' else self.TD[2]
+            return stencil, b
+
+        # 2. GEOMETRY SETUP
+        # Principle node coordinates
+        P = Coordinate2D(self.X[i, j], self.Y[i, j])
+        N = Coordinate2D(self.X[i-1, j], self.Y[i-1, j])
+        E = Coordinate2D(self.X[i, j+1], self.Y[i, j+1])
+        NE = Coordinate2D(self.X[i-1, j+1], self.Y[i-1, j+1])
+
+        # Auxiliary node coordinates
+        n = Coordinate2D((N.x + P.x)/2, (N.y + P.y)/2)
+        e = Coordinate2D((E.x + P.x)/2, (E.y + P.y)/2)
+        Ne = Coordinate2D((N.x + NE.x)/2, (N.y + NE.y)/2)
+        
+        # ne is the center of the geometric quadrant (Mirrored from NW's se)
+        # Average of the "North-East" quadrant bounds
+        ne = Coordinate2D((Ne.x + e.x)/2, (Ne.y + e.y)/2)
+
+        # Calculate Area
+        # Loop CCW: P -> e -> ne -> n
+        S_sw = abs(calculate_area(P, e, ne, n))
+        
+        # Get properties
+        rho = self.rho[i, j]
+        cp = self.cp[i, j]
+        
+        # --- FLUX CALCULATIONS (CCW Loop) ---
+        
+        # 1. SOUTH FACE (Boundary)
+        # Path: P -> e (Left to Right). Normal: Down.
+        southern_velocity_x = self.velocity_field[i, j][0]
+        southern_velocity_y = self.velocity_field[i, j][1]
+        F_S = rho * cp * (dy(P, e) * southern_velocity_x - dx(P, e) * southern_velocity_y)
+        
+        # 2. EAST FACE (Internal Neighbor)
+        # Path: e -> ne (Up). Normal: Right.
+        eastern_velocity_x = (self.velocity_field[i, j][0] + self.velocity_field[i, j+1][0]) / 2
+        eastern_velocity_y = (self.velocity_field[i, j][1] + self.velocity_field[i, j+1][1]) / 2
+        F_E = rho * cp * (dy(e, ne) * eastern_velocity_x - dx(e, ne) * eastern_velocity_y)
+        D3 = np.maximum(0, -F_E) / S_sw  # Inflow contributes to East neighbor
+
+        # 3. NORTH FACE (Internal Neighbor)
+        # Path: ne -> n (Left). Normal: Up.
+        northern_velocity_x = (self.velocity_field[i, j][0] + self.velocity_field[i-1, j][0]) / 2
+        northern_velocity_y = (self.velocity_field[i, j][1] + self.velocity_field[i-1, j][1]) / 2
+        F_N = rho * cp * (dy(ne, n) * northern_velocity_x - dx(ne, n) * northern_velocity_y)
+        D_1 = np.maximum(0, -F_N) / S_sw # Inflow contributes to North neighbor
+
+        # 4. WEST FACE (Boundary)
+        # Path: n -> P (Down). Normal: Left.
+        western_velocity_x = self.velocity_field[i, j][0]
+        western_velocity_y = self.velocity_field[i, j][1]
+        F_W = rho * cp * (dy(n, P) * western_velocity_x - dx(n, P) * western_velocity_y)
+
+        # --- SOURCE TERMS & RHS ---
+        b_s = 0.0
+        b_w = 0.0
+
+        # South Inlet Logic (Boundary 1)
+        if F_S < 0:
+            T_inlet_S = self.TD[1] 
+            b_s = (-F_S * T_inlet_S) / S_sw
+            
+        # West Inlet Logic (Boundary 2)
+        if F_W < 0:
+            T_inlet_W = self.TD[2] 
+            b_w = (-F_W * T_inlet_W) / S_sw
+
+        b += b_s + b_w
+
+        # --- CENTER COEFFICIENT (D0) ---
+        # Sum of all Outflows
+        D0 = (np.maximum(0, F_E) + 
+            np.maximum(0, F_W) + 
+            np.maximum(0, F_S) +
+            np.maximum(0, F_N)) / S_sw
+
+        # --- ASSEMBLE STENCIL ---
+        stencil[index(i, j)] = D0
+        
+        # Negative Neighbors on LHS
+        stencil[index(i, j+1)] = -D3   # East (j+1)
+        stencil[index(i-1, j)] = -D_1  # North (i-1)
+
+        return stencil, b
+    
+    def build_SE(self, i, j):
+        stencil = np.zeros(self.n * self.m)
+        b = 0.0
+        
+        # 1. DIRICHLET OVERRIDE
+        # Check South (1) and East (3)
+        if self.boundary[1] == 'D' or self.boundary[3] == 'D': 
+            stencil[index(i, j)] = 1.0
+            # Prioritize South, else East
+            b = self.TD[1] if self.boundary[1] == 'D' else self.TD[3]
+            return stencil, b
+
+        # 2. GEOMETRY SETUP
+        # Principle node coordinates
+        P = Coordinate2D(self.X[i, j], self.Y[i, j])
+        N = Coordinate2D(self.X[i-1, j], self.Y[i-1, j])
+        W = Coordinate2D(self.X[i, j-1], self.Y[i, j-1])
+        NW = Coordinate2D(self.X[i-1, j-1], self.Y[i-1, j-1])
+
+        # Auxiliary node coordinates
+        n = Coordinate2D((N.x + P.x)/2, (N.y + P.y)/2)
+        w = Coordinate2D((W.x + P.x)/2, (W.y + P.y)/2)
+        Nw = Coordinate2D((N.x + NW.x)/2, (N.y + NW.y)/2)
+        nW = Coordinate2D((W.x + NW.x)/2, (W.y + NW.y)/2)
+        
+        # nw is the center of the geometric quadrant
+        # Average of the "North-West" quadrant bounds
+        nw = Coordinate2D((Nw.x + w.x)/2, (Nw.y + w.y)/2)
+
+        # Calculate Area
+        # Loop CCW: P -> n -> nw -> w
+        S_se = abs(calculate_area(P, n, nw, w))
+        
+        # Get properties
+        rho = self.rho[i, j]
+        cp = self.cp[i, j]
+        
+        # --- FLUX CALCULATIONS (CCW Loop) ---
+        
+        # 1. EAST FACE (Boundary)
+        # Path: P -> n (Up). Normal: Right.
+        eastern_velocity_x = self.velocity_field[i, j][0]
+        eastern_velocity_y = self.velocity_field[i, j][1]
+        F_E = rho * cp * (dy(P, n) * eastern_velocity_x - dx(P, n) * eastern_velocity_y)
+
+        # 2. NORTH FACE (Internal Neighbor)
+        # Path: n -> nw (Left). Normal: Up.
+        northern_velocity_x = (self.velocity_field[i, j][0] + self.velocity_field[i-1, j][0]) / 2
+        northern_velocity_y = (self.velocity_field[i, j][1] + self.velocity_field[i-1, j][1]) / 2
+        F_N = rho * cp * (dy(n, nw) * northern_velocity_x - dx(n, nw) * northern_velocity_y)
+        D_1 = np.maximum(0, -F_N) / S_se # Inflow contributes to North neighbor
+
+        # 3. WEST FACE (Internal Neighbor)
+        # Path: nw -> w (Down). Normal: Left.
+        western_velocity_x = (self.velocity_field[i, j][0] + self.velocity_field[i, j-1][0]) / 2
+        western_velocity_y = (self.velocity_field[i, j][1] + self.velocity_field[i, j-1][1]) / 2
+        F_W = rho * cp * (dy(nw, w) * western_velocity_x - dx(nw, w) * western_velocity_y)
+        D_3 = np.maximum(0, -F_W) / S_se # Inflow contributes to West neighbor
+
+        # 4. SOUTH FACE (Boundary)
+        # Path: w -> P (Right). Normal: Down.
+        southern_velocity_x = self.velocity_field[i, j][0]
+        southern_velocity_y = self.velocity_field[i, j][1]
+        F_S = rho * cp * (dy(w, P) * southern_velocity_x - dx(w, P) * southern_velocity_y)
+
+        # --- SOURCE TERMS & RHS ---
+        b_s = 0.0
+        b_e = 0.0
+
+        # South Inlet Logic (Boundary 1)
+        if F_S < 0:
+            T_inlet_S = self.TD[1] 
+            b_s = (-F_S * T_inlet_S) / S_se
+            
+        # East Inlet Logic (Boundary 3)
+        if F_E < 0:
+            T_inlet_E = self.TD[3] 
+            b_e = (-F_E * T_inlet_E) / S_se
+
+        b += b_s + b_e
+
+        # --- CENTER COEFFICIENT (D0) ---
+        # Sum of all Outflows
+        D0 = (np.maximum(0, F_E) + 
+            np.maximum(0, F_W) + 
+            np.maximum(0, F_S) +
+            np.maximum(0, F_N)) / S_se
+
+        # --- ASSEMBLE STENCIL ---
+        stencil[index(i, j)] = D0
+        
+        # Negative Neighbors on LHS
+        stencil[index(i-1, j)] = -D_1  # North (i-1)
+        stencil[index(i, j-1)] = -D_3  # West (j-1)
+
+        return stencil, b
+    
