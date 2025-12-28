@@ -18,22 +18,24 @@ def analytical_solution(x, L, rho, c, u, k):
 # Usage
 L = 1.0
 x_coords = np.linspace(0, L, 100)
-T_exact = [analytical_solution(x, L, 1.0, 1.0, 1.0, k=0.1) for x in x_coords]
+k = 0.1
+u = 1.0
+T_exact = [analytical_solution(x, L, 1.0, 1.0, u, k) for x in x_coords]
 
 # Simple rectangular mesh
-dimX, dimY = 100, 3
-mesh = np.meshgrid(np.linspace(0, 0.1, dimY), np.linspace(0, L, dimX),)
+dimX, dimY = 200, 3
+mesh = np.meshgrid(np.linspace(0, L, dimX), np.linspace(0, 0.1, dimY))
 rho = np.ones((dimY, dimX)) * 1.0                                           # Density field
 cp = np.ones((dimY, dimX)) * 1.0                                            # Specific heat capacity field
-k = np.ones((dimY, dimX)) * 0.1                                             # Thermal conductivity field
-u = np.array([np.ones((dimY, dimX)), np.zeros((dimY, dimX))])                   # Velocity field
+k = np.ones((dimY, dimX)) * k                                             # Thermal conductivity field
+u = np.array([[[-u, 0] for x in range(dimX)] for y in range(dimY)])                   # Velocity field
 
 boundary =   ['N', 'N', 'D', 'D'] # [N,S,W,E] : D : Dirichlet, N : Neumann, R : Robin
 TD =  [0, 0, 0, 1] # [N,S,W,E]
 alpha = 20
 Tinf = 90
 q = 0
-fvm_solver = FVMSolver(mesh[1], mesh[0], boundary, TD, q, alpha, Tinf, k, u, rho, cp)
+fvm_solver = FVMSolver(mesh[0], mesh[1], boundary, TD, q, alpha, Tinf, k, u, rho, cp)
 # Solve the convection-diffusion equation
 T_numerical = fvm_solver.solve()
 # Get the middle row for comparison
@@ -41,7 +43,7 @@ T_numerical_mid = T_numerical[1, :]
 
 plt.figure(figsize=(8, 5))
 plt.plot(x_coords, T_exact, label='Analytical Solution', color='black', linewidth=2)
-plt.plot(x_coords, T_numerical_mid, 'r--', label='Numerical Solution (FVM)', linewidth=2)
+plt.plot(mesh[0][1], T_numerical_mid, 'r--', label='Numerical Solution (FVM)', linewidth=2)
 plt.xlabel('x')
 plt.ylabel('T')
 plt.title('Analytical Solution of 1D Convection-Diffusion Equation')

@@ -1,9 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-dimX = 50
-dimY = 50
-
 def calculate_area(ul, bl, br, ur):
     # calculate the area of the cell
     # ul (upper left), bl (bottom left), br (bottom right), ur (upper right) are the coordinates of the four vertices of the cell
@@ -26,6 +23,7 @@ def dist(a, b):
 
 def index(i, j):
     # Return the index in the computational vector based on the physical indices 'i', 'j' and dimX (global parameter)
+    dimX = 200
     return i * dimX + j 
 
 
@@ -1196,7 +1194,7 @@ class ConvectiveFVM(DiffFVM):
         nw = Coordinate2D((Nw.x + w.x)/2, (Nw.y + w.y)/2)
 
         # calculate the area of the cell
-        S_nn = calculate_area(e, ne, nw, w)
+        S_nn = calculate_area(ne, e, w, nw)
 
         # Get properties at the cell center
         rho = self.rho[i, j]
@@ -1220,9 +1218,9 @@ class ConvectiveFVM(DiffFVM):
 
         # North
         # x-direction velocity acorss the northern face
-        northern_velocity_x = (self.velocity_field[i, j][0] + self.velocity_field[i+1, j][0]) / 2
+        northern_velocity_x = (self.velocity_field[i, j][0] + self.velocity_field[i-1, j][0]) / 2
         # y-direction velocity acorss the northern face
-        northern_velocity_y = (self.velocity_field[i, j][1] + self.velocity_field[i+1, j][1]) / 2
+        northern_velocity_y = (self.velocity_field[i, j][1] + self.velocity_field[i-1, j][1]) / 2
         F_N = rho * cp * (dy(ne, nw) * northern_velocity_x - dx(ne, nw) * northern_velocity_y)
         D_1 = np.maximum(0, -F_N) / S_nn
 
@@ -1292,9 +1290,9 @@ class ConvectiveFVM(DiffFVM):
 
         # North
         # x-direction velocity acorss the northern face
-        northern_velocity_x = (self.velocity_field[i, j][0] + self.velocity_field[i+1, j][0]) / 2
+        northern_velocity_x = (self.velocity_field[i, j][0] + self.velocity_field[i-1, j][0]) / 2
         # y-direction velocity acorss the northern face
-        northern_velocity_y = (self.velocity_field[i, j][1] + self.velocity_field[i+1, j][1]) / 2
+        northern_velocity_y = (self.velocity_field[i, j][1] + self.velocity_field[i-1, j][1]) / 2
         F_N = rho * cp * (dy(n, nw) * northern_velocity_x - dx(n, nw) * northern_velocity_y)
         D_1 = np.maximum(0, -F_N) / S_ee
         
@@ -1380,9 +1378,9 @@ class ConvectiveFVM(DiffFVM):
 
         # North
         # x-direction velocity acorss the northern face
-        northern_velocity_x = (self.velocity_field[i, j][0] + self.velocity_field[i+1, j][0]) / 2
+        northern_velocity_x = (self.velocity_field[i, j][0] + self.velocity_field[i-1, j][0]) / 2
         # y-direction velocity acorss the northern face
-        northern_velocity_y = (self.velocity_field[i, j][1] + self.velocity_field[i+1, j][1]) / 2
+        northern_velocity_y = (self.velocity_field[i, j][1] + self.velocity_field[i-1, j][1]) / 2
         F_N = rho * cp * (dy(ne, n) * northern_velocity_x - dx(ne, n) * northern_velocity_y)
         D_1 = np.maximum(0, -F_N) / S_ww
         
@@ -1813,6 +1811,9 @@ class ConvectiveFVM(DiffFVM):
  
 class FVMSolver:
     def __init__(self, X, Y, boundary=[], TD=[], q=0, alpha=0, Tinf=0, conductivity=None, velocity_field=None, rho_field=None, cp_field=None):
+        self.m, self.n = X.shape
+        self.A = np.ones((self.n*self.m, self.n*self.m))
+        self.B = np.ones(self.n*self.m)
         self.diffFVM = DiffFVM(X, Y, boundary, TD, q, alpha, Tinf, conductivity)
         self.convFVM = ConvectiveFVM(X, Y, boundary, TD, q, alpha, Tinf, conductivity, velocity_field, rho_field, cp_field)
         
@@ -1826,7 +1827,7 @@ class FVMSolver:
                 self.A[k, :] = a_diff + a_conv
                 self.B[k] = b_diff + b_conv
         T = np.linalg.solve(self.A, self.B)        
-        
+        dimY, dimX = self.m, self.n
         return T.reshape(dimY, dimX)
 
        
