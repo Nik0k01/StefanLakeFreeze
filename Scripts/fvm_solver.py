@@ -293,7 +293,7 @@ class DiffFVM():
             coefficient = 0.0
             if self.boundary[0] == 'N':
                 coefficient = 0.0
-                b = self.q * self.dist(e, w) / S_ss
+                b = self.q[0] * self.dist(e, w) / S_ss
             elif self.boundary[0] == 'R':
                 coefficient = - self.alpha
                 b = - self.alpha * self.Tinf * self.dist(e, w) / S_ss
@@ -383,7 +383,7 @@ class DiffFVM():
             coefficient = 0.0
             if self.boundary[1] == 'N':
                 coefficient = 0.0
-                b = self.q * self.dist(e, w) / N_nn
+                b = self.q[1] * self.dist(e, w) / N_nn
             elif self.boundary[1] == 'R':
                 coefficient = - self.alpha
                 b = - self.alpha * self.Tinf * self.dist(e, w) / N_nn
@@ -473,7 +473,7 @@ class DiffFVM():
             coefficient = 0.0
             if self.boundary[3] == 'N':
                 coefficient = 0.0
-                b = self.q * self.dist(n, s) / S_ee
+                b = self.q[3] * self.dist(n, s) / S_ee
             elif self.boundary[3] == 'R':
                 coefficient = - self.alpha
                 b = - self.alpha * self.Tinf * self.dist(n, s) / S_ee
@@ -569,7 +569,7 @@ class DiffFVM():
             coefficient = 0.0
             if self.boundary[2] == 'N':
                 coefficient = 0.0
-                b = self.q * self.dist(n, s) / S_ww
+                b = self.q[2] * self.dist(n, s) / S_ww
             elif self.boundary[2] == 'R':
                 coefficient = - self.alpha
                 b = - self.alpha * self.Tinf * self.dist(n, s) / S_ww
@@ -652,14 +652,14 @@ class DiffFVM():
 
             # North boundary contribution (face e-P)
             if self.boundary[0] == 'N':
-                b_n = self.q * self.dist(e, P) / S_nw
+                b_n = self.q[0] * self.dist(e, P) / S_nw
             elif self.boundary[0] == 'R':
                 coef_n = -self.alpha
                 b_n = -self.alpha * self.Tinf * self.dist(e, P) / S_nw
 
             # West boundary contribution (face P-s)
             if self.boundary[2] == 'N':
-                b_w = self.q * self.dist(P, s) / S_nw
+                b_w = self.q[2] * self.dist(P, s) / S_nw
             elif self.boundary[2] == 'R':
                 coef_w = -self.alpha
                 b_w = -self.alpha * self.Tinf * self.dist(P, s) / S_nw
@@ -739,14 +739,14 @@ class DiffFVM():
 
             # North boundary contribution (face P-w)
             if self.boundary[0] == 'N':
-                b_n = self.q * self.dist(P, w) / S_ne
+                b_n = self.q[0] * self.dist(P, w) / S_ne
             elif self.boundary[0] == 'R':
                 coef_n = -self.alpha
                 b_n = -self.alpha * self.Tinf * self.dist(P, w) / S_ne
 
             # East boundary contribution (face s-P)
             if self.boundary[3] == 'N':
-                b_e = self.q * self.dist(s, P) / S_ne
+                b_e = self.q[3] * self.dist(s, P) / S_ne
             elif self.boundary[3] == 'R':
                 coef_e = -self.alpha
                 b_e = -self.alpha * self.Tinf * self.dist(s, P) / S_ne
@@ -828,14 +828,14 @@ class DiffFVM():
 
             # South boundary contribution (face e-P)
             if self.boundary[1] == 'N':
-                b_s = self.q * self.dist(e, P) / S_sw
+                b_s = self.q[1] * self.dist(e, P) / S_sw
             elif self.boundary[1] == 'R':
                 coef_s = -self.alpha
                 b_s = -self.alpha * self.Tinf * self.dist(e, P) / S_sw
 
             # West boundary contribution (face P-n)
             if self.boundary[2] == 'N':
-                b_w = self.q * self.dist(P, n) / S_sw
+                b_w = self.q[2] * self.dist(P, n) / S_sw
             elif self.boundary[2] == 'R':
                 coef_w = -self.alpha
                 b_w = -self.alpha * self.Tinf * self.dist(P, n) / S_sw
@@ -922,14 +922,14 @@ class DiffFVM():
 
             # South boundary contribution (face w-P)
             if self.boundary[1] == 'N':
-                b_s = self.q * self.dist(w, P) / S_se
+                b_s = self.q[1] * self.dist(w, P) / S_se
             elif self.boundary[1] == 'R':
                 coef_s = -self.alpha
                 b_s = -self.alpha * self.Tinf * self.dist(w, P) / S_se
 
             # East boundary contribution (face P-n)
             if self.boundary[3] == 'N':
-                b_e = self.q * self.dist(P, n) / S_se
+                b_e = self.q[3] * self.dist(P, n) / S_se
             elif self.boundary[3] == 'R':
                 coef_e = -self.alpha
                 b_e = -self.alpha * self.Tinf * self.dist(P, n) / S_se
@@ -1817,8 +1817,8 @@ class FVMSolver:
         self.diffFVM = DiffFVM(X, Y, boundary, TD, q, alpha, Tinf, conductivity)
         self.convFVM = ConvectiveFVM(X, Y, boundary, TD, q, alpha, Tinf, conductivity, velocity_field, rho_field, cp_field)
         
-    def source_term(self, x_source=0, y_source=0, q=0, type='point', 
-                    sigma=0.1, rho_s=2.0, rho_l=1.0, L_f=2000, flFieldOld=None, flFieldNew=None, dt=0.1):
+    def source_term(self, x_source=0, y_source=0, q=0, source_type='point', 
+                    sigma=0.1, rho_s=981., rho_l=1000., L_f=2000, flFieldOld=None, flFieldNew=None, dt=0.1):
         """
         Adds a source term to the RHS vector B.
         
@@ -1829,8 +1829,8 @@ class FVMSolver:
         - sigma: Standard deviation (width) for gaussian type
         """
         
-        if type is not None:
-            if type == 'point':
+        if source_type is not None:
+            if source_type == 'point':
                 # 1. Find the nearest grid node to the specified (x_source, y_source)
                 # Calculate squared distance to every point in the mesh
                 dist_sq = (self.X - x_source)**2 + (self.Y - y_source)**2
@@ -1845,7 +1845,7 @@ class FVMSolver:
                 # Add source to that single node
                 self.B[k] += q
 
-            elif type == 'gaussian':
+            elif source_type == 'gaussian':
                 # 1. Vectorized calculation for the whole grid
                 # Calculate squared distance from source center for ALL nodes
                 dist_sq = (self.X - x_source)**2 + (self.Y - y_source)**2
@@ -1857,7 +1857,7 @@ class FVMSolver:
                 # 3. Add to the flattened B vector
                 self.B += source_field.flatten()
                 
-            elif type == 'stefan':
+            elif source_type == 'stefan':
                 # Stefan source term implementation 
                 source_term = (flFieldNew - flFieldOld) / dt
                 # Mixed density based on phase field
@@ -1887,8 +1887,8 @@ class FVMSolver:
         steps = int(t_end/dt)
         print(f"Total time steps: {steps}")
         # 3D array to store temperature history
-        if steps > 100:
-            max_size = 100                                  # Maximum 100 time steps
+        if steps > 1:
+            max_size = 1                                  # Maximum 1 time steps
         else:
             max_size = steps
         # Create a dictionary with indexes corresponding to time steps to save
@@ -1927,8 +1927,6 @@ class FVMSolver:
                 a_conv, b_conv = self.convFVM.set_stencil(i, j)
                 self.A[k, :] = a_diff + a_conv
                 self.B[k] = b_diff + b_conv
-        # Add source term if specified
-        self.source_term(**source_params, type=source_type)
         # Solve using implicit scheme
         T_history = self.implicit_scheme(T_initial, t_end, dt)
         return T_history
