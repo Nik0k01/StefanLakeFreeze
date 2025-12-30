@@ -34,7 +34,7 @@ boundary =   ['N', 'N', 'D', 'D'] # [N,S,W,E] : D : Dirichlet, N : Neumann, R : 
 TD =  [0, 0, 0, 1] # [N,S,W,E]
 alpha = 20
 Tinf = 90
-q = 0
+q = [0, 0, 0, 0] # [N,S,W,E]
 fvm_solver = FVMSolver(mesh[0], mesh[1], boundary, TD, q, alpha, Tinf, k, u, rho, cp)
 # Solve the convection-diffusion equation
 T_numerical = fvm_solver.solve()

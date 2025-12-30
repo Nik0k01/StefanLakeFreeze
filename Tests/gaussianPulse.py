@@ -33,7 +33,7 @@ def gaussian_analytical_2d(X, Y, t, u, v, D, x0, y0, sigma0):
     return peak_decay * np.exp(exponent)
 
 # Simple rectangular mesh
-dimX, dimY = 100, 100
+dimX, dimY = 40, 40
 L = 3.0
 mesh = np.meshgrid(np.linspace(0, L, dimX), np.linspace(0, L, dimY))
 k = 0.1

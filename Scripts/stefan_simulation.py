@@ -1,6 +1,6 @@
-from Scripts.fvm_solver import FVM_Solver
-from Scripts.fl_field import FLField
-from velocity_field import VelocityField
+from Scripts.fvm_solver import FVMSolver
+from Scripts.fl_field import FlField
+from Scripts.velocity_field import velocityField
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -14,14 +14,14 @@ class StefanSimulation:
         self.current_time = 0.0
         
         self.T_field = initial_temp.copy()
-        self.fl_field = FLField(X, Y)
+        self.fl_field = FlField(X, Y)
         self.enthalpy_field = self.calculate_enthalpy(self.T_field)
-        self.velocity_field = VelocityField(X, Y)
+        self.velocity_field = velocityField(X, Y, dt=self.dt)
         
-        self.fvm_solver = FVM_Solver(X, Y, boundary=['N', 'D', 'N', 'N'], 
+        self.fvm_solver = FVMSolver(X, Y, boundary=['N', 'D', 'N', 'N'], 
                                      TD=[0, 278.15, 0, 0], q=[-200, 0, 0, 0], alpha=1.0, 
                                      Tinf=273.15, conductivity=np.ones(X.shape)*560,
-                                     velocity_field=np.zeros(X.shape),
+                                     velocity_field=self.velocity_field.velocity_field,
                                      rho_field=np.ones(X.shape)*1000,
                                      cp_field=np.ones(X.shape)*4181)
     
@@ -68,18 +68,26 @@ class StefanSimulation:
             while not converged and iteration < max_iterations:
                 # Solve temperature field
                 T_field_old = self.T_field.copy()
-                fl_field_new = self.fl_field.flField + 0.001
+                fl_field_new = self.fl_field.flField.copy()
+                fl_field_new[0, :] -= 0.01
                 # Update source term
                 self.fvm_solver.source_term(source_type='stefan',flFieldOld=self.fl_field.flField,
                                             flFieldNew=fl_field_new,
                                             dt=self.dt)
-                self.T_field = self.fvm_solver.unsteady_solve(self.T_field, self.dt, self.enthalpy_field)
+                T_field = self.fvm_solver.unsteady_solve(T_initial=self.T_field, t_end=self.current_time+self.dt, dt=self.dt)
+                self.T_field = T_field[-1, :, :]
                 # Update phase field
                 self.fl_field.update_phase_field(self.enthalpy_field)
                 
                 # Update velocity field based on new phase field
-                self.velocity_field.update_velocity_field(self.fl_field.flField)
-                self.fvm_solver.velocity_field = self.velocity_field.velocity_field
+                velocity_field = self.velocity_field.generate_velocity_field(self.fl_field.flField, fl_field_new)
+                # Update FVM solver with new velocity field
+                self.fvm_solver = FVMSolver(self.X, self.Y, boundary=['N', 'D', 'N', 'N'], 
+                                     TD=[0, 278.15, 0, 0], q=[-200, 0, 0, 0], alpha=1.0, 
+                                     Tinf=273.15, conductivity=np.ones(self.X.shape)*0.560,
+                                     velocity_field=velocity_field,
+                                     rho_field=np.ones(self.X.shape)*1000,
+                                     cp_field=np.ones(self.X.shape)*4181)
                 
                 # Calculate new enthalpy field
                 new_enthalpy_field = self.calculate_enthalpy(self.T_field)
@@ -102,7 +110,8 @@ Lx, Ly = 0.1, 0.1
 dimX, dimY = 50, 50
 mesh = np.meshgrid(np.linspace(0, Lx, dimX), np.linspace(0, Ly, dimY))
 initial_temp = np.ones((dimY, dimX)) * 273.15  # Initial temperature field (in Kelvin)
-time_step = 1.0  # seconds
+initial_temp[-1, :] = 278.15  # Top boundary at higher temperature
+time_step = 0.001  # seconds
 steps_no = 10    # number of time steps to simulate
 
 simulation = StefanSimulation(mesh[0], mesh[1], initial_temp, time_step, steps_no)

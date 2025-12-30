@@ -11,7 +11,7 @@ class FlField():
         self.cp_l = cp_l
         self.T_melt = T_melt 
         
-        self.flField = np.zeros(X.shape)
+        self.flField = np.ones(X.shape)
 
     def update_phase_field(self, enthalpy_field):
         """

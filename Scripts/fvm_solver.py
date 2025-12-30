@@ -148,11 +148,11 @@ class DiffFVM():
         nw = Coordinate2D((Nw.x + w.x)/2, (Nw.y + w.y)/2)
         
         # calculate the area of the cell
-        S_P = self.calculate_area(ne, se, sw, nw)
-        S_n = self.calculate_area(Ne, e, w, Nw)
-        S_s = self.calculate_area(e, Se, Sw, w)
-        S_w = self.calculate_area(n, s, sW, nW)
-        S_e = self.calculate_area(nE, sE, s, n)
+        S_P = np.abs(self.calculate_area(ne, se, sw, nw))
+        S_n = np.abs(self.calculate_area(Ne, e, w, Nw))
+        S_s = np.abs(self.calculate_area(e, Se, Sw, w))
+        S_w = np.abs(self.calculate_area(n, s, sW, nW))
+        S_e = np.abs(self.calculate_area(nE, sE, s, n))
         
 
         D3 = ((self.dx(se, ne) * (self.dx(nE, n)/4 + self.dx(s, sE)/4 + self.dx(sE, nE))) / S_e + 
@@ -255,10 +255,10 @@ class DiffFVM():
             sw = Coordinate2D((Sw.x + w.x)/2, (Sw.y + w.y)/2)
 
             # calculate the area of the cell
-            S_ss = self.calculate_area(e, se, sw, w)
-            S_s = self.calculate_area(e, Se, Sw, w)
-            S_ssw = self.calculate_area(P, s, sW, W)
-            S_sse = self.calculate_area(E, sE, s, P)
+            S_ss = np.abs(self.calculate_area(e, se, sw, w))
+            S_s = np.abs(self.calculate_area(e, Se, Sw, w))
+            S_ssw = np.abs(self.calculate_area(P, s, sW, W))
+            S_sse = np.abs(self.calculate_area(E, sE, s, P))
 
             
             
