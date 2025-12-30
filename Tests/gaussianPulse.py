@@ -1,3 +1,8 @@
+"""
+Test case for 2D Convection-Diffusion of a Gaussian Pulse
+This script provides an analytical solution for the 2D unsteady convection-diffusion equation
+with an initial Gaussian pulse and compares it with the numerical solution obtained via FVM.
+"""
 from Scripts.fvm_solver import *
 import numpy as np
 import matplotlib.pyplot as plt
