@@ -1817,7 +1817,8 @@ class FVMSolver:
         self.diffFVM = DiffFVM(X, Y, boundary, TD, q, alpha, Tinf, conductivity)
         self.convFVM = ConvectiveFVM(X, Y, boundary, TD, q, alpha, Tinf, conductivity, velocity_field, rho_field, cp_field)
         
-    def source_term(self, x_source=0, y_source=0, q=0, type='point', sigma=0.1):
+    def source_term(self, x_source=0, y_source=0, q=0, type='point', 
+                    sigma=0.1, rho_s=2.0, rho_l=1.0, L_f=2000, flFieldOld=None, flFieldNew=None, dt=0.1):
         """
         Adds a source term to the RHS vector B.
         
@@ -1858,7 +1859,11 @@ class FVMSolver:
                 
             elif type == 'stefan':
                 # Stefan source term implementation 
-                pass
+                source_term = (flFieldNew - flFieldOld) / dt
+                # Mixed density based on phase field
+                rho = rho_s  + flFieldNew * (rho_l - rho_s)
+                source_term *= rho * L_f
+                self.B += source_term.flatten()
             else:
                 raise ValueError("Unknown source term type. Use 'point', 'gaussian', or 'stefan'.")
     
