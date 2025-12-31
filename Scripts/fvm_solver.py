@@ -558,13 +558,14 @@ class DiffFVM():
 
             # NE
             D2 = (self.dy(ne, n) * (self.dy(e, Ne) / 4 + self.dy(Ne, N) / 4) / S_wwn +
-                self.dx(ne, n) * (self.dx(e, Ne) / 4 + self.dx(Ne, N) / 4) / S_wwn +
-                self.dy(se, ne) * (self.dy(nE, n) / 4) / S_w + self.dx(se, ne) * (self.dx(nE, n) / 4) / S_w) / S_ww
+                  self.dx(ne, n) * (self.dx(e, Ne) / 4 + self.dx(Ne, N) / 4) / S_wwn +
+                  self.dy(se, ne) * (self.dy(nE, n) / 4) / S_w + self.dx(se, ne) * (self.dx(nE, n) / 4) / S_w) / S_ww
 
             # SE
             D4 = (self.dy(se, ne) * (self.dy(s, sE) / 4) / S_w + self.dx(se, ne) * (self.dx(s, sE) / 4) / S_w +
-                self.dy(s, se) * (self.dy(Se, e) / 4 + self.dy(Se, e) / 4) / S_wws +
-                self.dx(s, se) * (self.dx(Se, e) / 4 + self.dx(Se, e) / 4) / S_wws) / S_ww
+                  self.dy(s, se) * (self.dy(Se, e) / 4 + self.dy(S, Se) / 4) / S_wws +
+                  self.dx(s, se) * (self.dx(Se, e) / 4 + self.dx(S, Se) / 4) / S_wws) / S_ww
+        
             
             coefficient = 0.0
             if self.boundary[2] == 'N':
