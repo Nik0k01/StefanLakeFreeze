@@ -1813,13 +1813,14 @@ class FVMSolver:
         self.m, self.n = X.shape
         self.X = X
         self.Y = Y
-        self.A = np.ones((self.n*self.m, self.n*self.m))
-        self.B = np.ones(self.n*self.m)
+        self.A = np.zeros((self.n*self.m, self.n*self.m))
+        self.B = np.zeros(self.n*self.m)
         self.diffFVM = DiffFVM(X, Y, boundary, TD, q, alpha, Tinf, conductivity)
         self.convFVM = ConvectiveFVM(X, Y, boundary, TD, q, alpha, Tinf, conductivity, velocity_field, rho_field, cp_field)
         
     def source_term(self, x_source=0, y_source=0, q=0, source_type='point', 
-                    sigma=0.1, rho_s=981., rho_l=1000., L_f=2000, flFieldOld=None, flFieldNew=None, dt=0.1):
+                    sigma=0.1, rho_s=981., rho_l=1000., 
+                    L_f=2000, flFieldOld=None, flFieldNew=None, dt=0.1):
         """
         Adds a source term to the RHS vector B.
         
@@ -1863,7 +1864,9 @@ class FVMSolver:
                 source_term = (flFieldNew - flFieldOld) / dt
                 # Mixed density based on phase field
                 rho = rho_s  + flFieldNew * (rho_l - rho_s)
+                # Energy is released when water is freezing
                 source_term *= rho * L_f
+                # Add to the flattened B vector
                 self.B += source_term.flatten()
             else:
                 raise ValueError("Unknown source term type. Use 'point', 'gaussian', or 'stefan'.")
@@ -1913,7 +1916,7 @@ class FVMSolver:
                 T_history[idx, :, :] = T_new.reshape(self.m, self.n)
         return T_history
     
-    def unsteady_solve(self, T_initial, t_end=1, dt=0.001, theta=0.5, source_type=None, source_params={}):
+    def unsteady_solve(self, T_initial, t_end=1, dt=0.001, theta=0.5):
         """ 
         T_initial: Initial temperature field
         """
@@ -1927,7 +1930,7 @@ class FVMSolver:
                 a_diff, b_diff = self.diffFVM.set_stencil(i, j)
                 a_conv, b_conv = self.convFVM.set_stencil(i, j)
                 self.A[k, :] = a_diff + a_conv
-                self.B[k] = b_diff + b_conv
+                self.B[k] += b_diff + b_conv
         # Solve using implicit scheme
         T_history = self.implicit_scheme(T_initial, t_end, dt)
         return T_history

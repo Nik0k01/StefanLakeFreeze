@@ -167,7 +167,7 @@ class velocityField():
         nw = Coordinate2D((Nw.x + w.x)/2, (Nw.y + w.y)/2)
 
         # calculate the area of the cell
-        S_nn = self.calculate_area(e, ne, nw, w)
+        S_nn = self.calculate_area(e, w, nw, ne)
         return S_nn, self.dx(ne, nw), self.dx(w, e)
          
     def build_east(self, i, j):

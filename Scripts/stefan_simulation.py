@@ -12,7 +12,8 @@ class StefanSimulation:
         self.steps_no = steps_no
         self.total_time = time_step * steps_no
         self.current_time = 0.0
-        
+        self.cell_areas = np.zeros(X.shape)
+
         self.T_field = initial_temp.copy()
         self.fl_field = FlField(X, Y)
         self.enthalpy_field = self.calculate_enthalpy(self.T_field)
@@ -69,11 +70,10 @@ class StefanSimulation:
                 # Solve temperature field
                 T_field_old = self.T_field.copy()
                 fl_field_new = self.fl_field.flField.copy()
-                fl_field_new[0, :] -= 0.01
+                fl_field_new[0, :] -= 1e-5
                 # Update source term
                 self.fvm_solver.source_term(source_type='stefan',flFieldOld=self.fl_field.flField,
-                                            flFieldNew=fl_field_new,
-                                            dt=self.dt)
+                                            flFieldNew=fl_field_new, dt=self.dt)
                 T_field = self.fvm_solver.unsteady_solve(T_initial=self.T_field, t_end=self.current_time+self.dt, dt=self.dt)
                 self.T_field = T_field[-1, :, :]
                 # Update phase field
