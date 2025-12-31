@@ -25,6 +25,11 @@ class StefanSimulation:
                                      velocity_field=self.velocity_field.velocity_field,
                                      rho_field=np.ones(X.shape)*1000,
                                      cp_field=np.ones(X.shape)*4181)
+        
+        self.flHistory = []
+        self.THistory = []
+        self.flHistory.append(self.fl_field.flField.copy())
+        self.THistory.append(self.T_field.copy())
     
     def calculate_enthalpy(self, temperature_field):
         """
@@ -50,57 +55,81 @@ class StefanSimulation:
     
     def run(self):
         time_steps = int(self.total_time / self.dt)
-        
-        # For a given step, first solve the temperature field
-        # Then update the phase field and the velocity field
-        # Calculate the enthalpy field
-        # For new phase and velocity field correct the temperature field
-        # Iterate until convergence within the time step
-        # Move to the next time step
-        
-        
+
         for step in range(time_steps):
             print(f"Time Step {step+1}/{time_steps}, Time: {self.current_time:.2f}s")
+            
+            # 1. SAVE THE PREVIOUS STATE 
+            # This must not change during the iterations
+            fl_field_old = self.fl_field.flField.copy()
+            
+            # 2. Initialize guess for the new field
+            # Start by assuming nothing changes (or use last step's rate)
+            fl_field_current_guess = fl_field_old.copy()
+            
             converged = False
             iteration = 0
-            max_iterations = 100
+            max_iterations = 20 # usually converges fast
             tolerance = 1e-4
-            
+
             while not converged and iteration < max_iterations:
-                # Solve temperature field
-                T_field_old = self.T_field.copy()
-                fl_field_new = self.fl_field.flField.copy()
-                fl_field_new[0, :] -= 1e-5
-                # Update source term
-                self.fvm_solver.source_term(source_type='stefan',flFieldOld=self.fl_field.flField,
-                                            flFieldNew=fl_field_new, dt=self.dt)
-                T_field = self.fvm_solver.unsteady_solve(T_initial=self.T_field, t_end=self.current_time+self.dt, dt=self.dt)
-                self.T_field = T_field[-1, :, :]
-                # Update phase field
-                self.fl_field.update_phase_field(self.enthalpy_field)
                 
-                # Update velocity field based on new phase field
-                velocity_field = self.velocity_field.generate_velocity_field(self.fl_field.flField, fl_field_new)
-                # Update FVM solver with new velocity field
-                self.fvm_solver = FVMSolver(self.X, self.Y, boundary=['N', 'D', 'N', 'N'], 
-                                     TD=[0, 278.15, 0, 0], q=[-200, 0, 0, 0], alpha=1.0, 
-                                     Tinf=273.15, conductivity=np.ones(self.X.shape)*0.560,
-                                     velocity_field=velocity_field,
-                                     rho_field=np.ones(self.X.shape)*1000,
-                                     cp_field=np.ones(self.X.shape)*4181)
+                # --- STEP A: Update Source Term based on GUESS ---
+                # Note: We calculate latent heat release if our guess is correct
+                self.fvm_solver.source_term(
+                    source_type='stefan',
+                    flFieldOld=fl_field_old,           # Always reference t=n
+                    flFieldNew=fl_field_current_guess, # Reference t=n+1 (guess)
+                    dt=self.dt
+                )
                 
-                # Calculate new enthalpy field
-                new_enthalpy_field = self.calculate_enthalpy(self.T_field)
+                # --- STEP B: Solve Temperature ---
+                # The solver sees the heat released by the guessed freezing
+                T_field = self.fvm_solver.unsteady_solve(
+                    T_initial=self.T_field, 
+                    t_end=self.dt, 
+                    dt=self.dt
+                )
+                # Extract the 2D result 
+                current_T_field = T_field[-1, :, :]
+
+                # --- STEP C: Correct Phase Field (The Driver) ---
+                # Now we ask: "Given this Temp, what should the phase actually be?"
+                # This is the Temperature Recovery / Enthalpy Update step.
                 
-                # Check convergence
-                if np.max(np.abs(new_enthalpy_field - self.enthalpy_field)) < tolerance:
+                # Calculate enthalpy or use Temperature directly to find liquid fraction
+                # (Assuming you have a function that returns f based on T or H)
+                new_enthalpy = self.calculate_enthalpy(current_T_field)
+                
+                # Calculate what the phase *should* be 
+                # based on the NEW temperature field
+                fl_field_calculated = self.fl_field.update_phase_field(new_enthalpy) 
+                
+                # --- STEP D: Check Convergence ---
+                # Did our guess match the result?
+                diff = np.max(np.abs(fl_field_calculated - fl_field_current_guess))
+                if diff < tolerance:
                     converged = True
                 
-                self.enthalpy_field = new_enthalpy_field
+                # --- STEP E: Update Guess for next iteration ---
+                # Don't just swap them; use under-relaxation to prevent oscillations
+                # f_new = f_old + omega * (f_calc - f_old)
+                relax = 0.5 
+                fl_field_current_guess = fl_field_current_guess + relax * (fl_field_calculated - fl_field_current_guess)
+                
                 iteration += 1
+
+            # --- End of Time Step ---
+            # Commit the final calculated values
+            self.T_field = current_T_field
+            self.fl_field.flField = fl_field_calculated # Update the object state
+            self.enthalpy_field = new_enthalpy
+            
+            self.flHistory.append(self.fl_field.flField.copy())
+            self.THistory.append(self.T_field.copy())
             
             if not converged:
-                print("Warning: Did not converge within max iterations.")
+                print(f"Warning: Step {step} not converged. Residual: {diff}")
             
             self.current_time += self.dt
             
@@ -116,3 +145,26 @@ steps_no = 10    # number of time steps to simulate
 
 simulation = StefanSimulation(mesh[0], mesh[1], initial_temp, time_step, steps_no)
 simulation.run()
+
+# Plot fl and temperature histories
+for step in range(len(simulation.flHistory)):
+    plt.figure(figsize=(12, 5))
+    
+    plt.subplot(1, 2, 1)
+    plt.title(f'Liquid Fraction at Step {step}')
+    plt.contourf(simulation.X, simulation.Y, simulation.flHistory[step], levels=20, cmap='Blues')
+    plt.colorbar(label='Liquid Fraction')
+    plt.xlabel('X (m)')
+    plt.ylabel('Y (m)')
+    
+    plt.subplot(1, 2, 2)
+    plt.title(f'Temperature at Step {step} (K)')
+    plt.contourf(simulation.X, simulation.Y, simulation.THistory[step], levels=20, cmap='hot')
+    plt.colorbar(label='Temperature (K)')
+    plt.xlabel('X (m)')
+    plt.ylabel('Y (m)')
+    
+    plt.tight_layout()
+    plt.show()
+    
+    
