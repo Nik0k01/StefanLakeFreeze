@@ -107,7 +107,7 @@ class StefanSimulation:
             
 # Example usage
 Lx, Ly = 0.1, 0.1
-dimX, dimY = 50, 50
+dimX, dimY = 4, 4
 mesh = np.meshgrid(np.linspace(0, Lx, dimX), np.linspace(0, Ly, dimY))
 initial_temp = np.ones((dimY, dimX)) * 273.15  # Initial temperature field (in Kelvin)
 initial_temp[-1, :] = 278.15  # Top boundary at higher temperature
