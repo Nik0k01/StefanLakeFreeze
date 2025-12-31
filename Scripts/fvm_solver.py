@@ -632,15 +632,15 @@ class DiffFVM():
                  ) / S_nw
 
             # --- D3 (East) coefficient (Mirrored from NE's D_3) ---
-            D3 = (self.dy(s, se) * (self.dy(e, Se) / 4 + self.dy(P, e) / 4) / S_nws +
-                  self.dx(s, se) * (self.dx(e, Se) / 4 + self.dx(P, e) / 4) / S_nws +
+            D3 = (self.dy(s, se) * (self.dy(Se, e) / 4 + self.dy(e, P) / 4) / S_nws +
+                  self.dx(s, se) * (self.dx(Se, e) / 4 + self.dx(e, P) / 4) / S_nws +
                   self.dy(se, e) * (self.dy(s, sE) / 4 + 3 * self.dy(sE, E) / 4 + self.dy(E, P) / 2) / S_nwe +
                   self.dx(se, e) * (self.dx(s, sE) / 4 + 3 * self.dx(sE, E) / 4 + self.dx(E, P) / 2) / S_nwe
                  ) / S_nw
 
             # --- D4 (Southeast) coefficient (Mirrored from NE's D_2) ---
-            D4 = (self.dy(s, se) * (self.dy(Se, S) / 4 + self.dy(e, Se) / 4) / S_nws +
-                  self.dx(s, se) * (self.dx(Se, S) / 4 + self.dx(e, Se) / 4) / S_nws +
+            D4 = (self.dy(s, se) * (self.dy(S, Se) / 4 + self.dy(Se, e) / 4) / S_nws +
+                  self.dx(s, se) * (self.dx(S, Se) / 4 + self.dx(Se, e) / 4) / S_nws +
                   self.dy(se, e) * (self.dy(s, sE) / 4 + self.dy(sE, E) / 4) / S_nwe +
                   self.dx(se, e) * (self.dx(s, sE) / 4 + self.dx(sE, E) / 4) / S_nwe
                  ) / S_nw
