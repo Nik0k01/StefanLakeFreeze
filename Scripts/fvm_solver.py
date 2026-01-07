@@ -1820,7 +1820,7 @@ class FVMSolver:
         
     def source_term(self, x_source=0, y_source=0, q=0, source_type='point', 
                     sigma=0.1, rho_s=981., rho_l=1000., 
-                    L_f=2000, flFieldOld=None, flFieldNew=None, dt=0.1):
+                    L_f=334000, flFieldOld=None, flFieldNew=None, dt=0.1):
         """
         Adds a source term to the RHS vector B.
         
@@ -1865,7 +1865,7 @@ class FVMSolver:
                 # Mixed density based on phase field
                 rho = rho_s  + flFieldNew * (rho_l - rho_s)
                 # Energy is released when water is freezing
-                source_term *= rho * L_f
+                source_term *= rho_l * L_f
                 # Add to the flattened B vector
                 self.B += source_term.flatten()
             else:
@@ -1916,7 +1916,7 @@ class FVMSolver:
                 T_history[idx, :, :] = T_new.reshape(self.m, self.n)
         return T_history
     
-    def unsteady_solve(self, T_initial, t_end=1, dt=0.001, theta=0.5):
+    def unsteady_solve(self, T_initial, t_end=1, dt=0.001, theta=0.5, boundries=None):
         """ 
         T_initial: Initial temperature field
         """
@@ -1932,7 +1932,29 @@ class FVMSolver:
                 self.A[k, :] = a_diff + a_conv
                 self.B[k] += b_diff + b_conv
         # Solve using implicit scheme
+        self.normalize_matrix(boundries, self.convFVM.rho, self.convFVM.cp)
         T_history = self.implicit_scheme(T_initial, t_end, dt)
         return T_history
+    
+    def normalize_matrix(self, boundaries, rho_field=None, cp_field=None):
+        rho_cp = rho_field * cp_field
+        for i, boundary in enumerate(boundaries):
+            # N, S, W, E
+            if boundary == 'D':
+                if i == 0:
+                    rho_cp[0, :] = 1.0
+                elif i == 1:
+                    rho_cp[-1, :] = 1.0
+                elif i == 2:  
+                    rho_cp[:, 0] = 1.0
+                elif i == 3:
+                    rho_cp[:, -1] = 1.0
+        # Flatten the rho_cp field to match matrix dimensions
+        rho_cp_flat = rho_cp.flatten()
+        # Normalize each row of A and corresponding B entry
+        self.A /= rho_cp_flat[:, None]
+        self.B /= rho_cp_flat
+                
+        
 
        
