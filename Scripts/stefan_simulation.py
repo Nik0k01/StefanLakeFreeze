@@ -178,8 +178,8 @@ for step in range(len(simulation.flHistory)):
     plt.subplot(1, 2, 1)
     plt.title(f'Liquid Fraction at Step {step}')
     cf1 = plt.contourf(simulation.X, simulation.Y, simulation.flHistory[step], 
-                       levels=np.linspace(0.99999, 1, 11), 
-                       vmin=0.99999, vmax=1, 
+                       levels=np.linspace(0.99995, 1, 11), 
+                       vmin=0.99995, vmax=1, 
                        cmap='Blues')
     plt.colorbar(cf1, label='Liquid Fraction', ticks=np.linspace(0, 1, 11))
     plt.xlabel('X (m)')
