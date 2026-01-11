@@ -1818,6 +1818,7 @@ class FVMSolver:
         self.diffFVM = DiffFVM(X, Y, boundary, TD, q, alpha, Tinf, conductivity)
         self.convFVM = ConvectiveFVM(X, Y, boundary, TD, q, alpha, Tinf, conductivity, velocity_field, rho_field, cp_field)
         
+        
     def source_term(self, x_source=0, y_source=0, q=0, source_type='point', 
                     sigma=0.1, rho_s=981., rho_l=1000., 
                     L_f=334000, flFieldOld=None, flFieldNew=None, dt=0.1):
