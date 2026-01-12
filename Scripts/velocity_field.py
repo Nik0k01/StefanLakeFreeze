@@ -25,8 +25,8 @@ class velocityField():
         self.m, self.n = X.shape
         # m -> y or i , n -> x or j
         self.velocity_field = np.array([[[0, 0] for x in range(self.n)] for y in range(self.m)], dtype=np.float64)
-        self.top_flux = np.zeros((self.m, self.n))
-        self.bottom_flux = np.zeros((self.m, self.n))
+        self.top_flux = np.zeros((self.m, self.n), dtype=np.float64)
+        self.bottom_flux = np.zeros((self.m, self.n), dtype=np.float64)
         
     def calculate_area(self, ul, bl, br, ur):
         # calculate the area of the cell

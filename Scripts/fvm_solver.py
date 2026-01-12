@@ -83,7 +83,7 @@ class DiffFVM():
         return a, b
     
     def build_inner(self, i, j):
-        stencil = np.zeros(self.n*self.m)
+        stencil = np.zeros(self.n*self.m, dtype=np.float64)
         b = 0.0
         # % Nomenclature:
         # %
@@ -227,7 +227,7 @@ class DiffFVM():
         return stencil,b
         
     def build_north(self, i, j):
-        stencil = np.zeros(self.n*self.m)
+        stencil = np.zeros(self.n*self.m, dtype=np.float64)
         b = 0.0
         if self.boundary[0] == 'D':
             stencil[self.index(i, j)] = 1.0
@@ -319,7 +319,7 @@ class DiffFVM():
         return stencil,b
     
     def build_south(self, i, j):
-        stencil = np.zeros(self.n*self.m)
+        stencil = np.zeros(self.n*self.m, dtype=np.float64)
         b = 0.0
         if self.boundary[1] == 'D':
             stencil[self.index(i, j)] = 1.0
@@ -409,7 +409,7 @@ class DiffFVM():
         return stencil,b
          
     def build_east(self, i, j):
-        stencil = np.zeros(self.n*self.m)
+        stencil = np.zeros(self.n*self.m, dtype=np.float64)
         b = 0.0
         if self.boundary[3] == 'D':
             stencil[self.index(i, j)] = 1.0
@@ -505,7 +505,7 @@ class DiffFVM():
         return stencil,b        
     
     def build_west(self, i, j):
-        stencil = np.zeros(self.n*self.m)
+        stencil = np.zeros(self.n*self.m, dtype=np.float64)
         b = 0.0
         if self.boundary[2] == 'D':  # Using self.index 2 for west boundary
             stencil[self.index(i, j)] = 1.0
@@ -596,7 +596,7 @@ class DiffFVM():
         return stencil,b
         
     def build_NW(self, i, j):
-        stencil = np.zeros(self.n*self.m)
+        stencil = np.zeros(self.n*self.m, dtype=np.float64)
         b = 0.0
         
         # For NW corner, we need to consider both North and West boundary conditions
@@ -685,7 +685,7 @@ class DiffFVM():
         return stencil, b
     
     def build_NE(self, i, j):
-        stencil = np.zeros(self.n*self.m)
+        stencil = np.zeros(self.n*self.m, dtype=np.float64)
         b = 0.0
         
         # For NE corner, we need to consider both North and East boundary conditions
@@ -772,7 +772,7 @@ class DiffFVM():
         return stencil, b
     
     def build_SW(self, i, j):
-        stencil = np.zeros(self.n*self.m)
+        stencil = np.zeros(self.n*self.m, dtype=np.float64)
         b = 0.0
         
         # For SW corner, we need to consider both South and West boundary conditions
@@ -861,7 +861,7 @@ class DiffFVM():
         return stencil, b
     
     def build_SE(self, i, j):
-        stencil = np.zeros(self.n*self.m)
+        stencil = np.zeros(self.n*self.m, dtype=np.float64)
         b = 0.0
         
         # For SE corner, we need to consider both South and East boundary conditions
@@ -964,7 +964,7 @@ class ConvectiveFVM(DiffFVM):
         self.cp = cp_field  # cp_field should be an array indexed by (x,y) and returning specific heat at that point
         
     def build_inner(self, i, j):
-        stencil = np.zeros(self.n*self.m)
+        stencil = np.zeros(self.n*self.m, dtype=np.float64)
         b = 0.0
         # % Nomenclature:
         # %
@@ -1077,7 +1077,7 @@ class ConvectiveFVM(DiffFVM):
         return stencil,b
     
     def build_north(self, i, j):
-        stencil = np.zeros(self.n*self.m)
+        stencil = np.zeros(self.n*self.m, dtype=np.float64)
         b = 0.0
         # 1. Handle Dirichlet (Fixed Temperature Wall/Inlet)
         if self.boundary[0] == 'D':
@@ -1166,7 +1166,7 @@ class ConvectiveFVM(DiffFVM):
         return stencil,b
     
     def build_south(self, i, j):
-        stencil = np.zeros(self.n*self.m)
+        stencil = np.zeros(self.n*self.m, dtype=np.float64)
         b = 0.0
         # 1. Handle Dirichlet (Fixed Temperature Wall/Inlet)
         if self.boundary[1] == 'D':
@@ -1253,7 +1253,7 @@ class ConvectiveFVM(DiffFVM):
         return stencil,b
     
     def build_east(self, i, j):
-        stencil = np.zeros(self.n*self.m)
+        stencil = np.zeros(self.n*self.m, dtype=np.float64)
         b = 0.0
         # 1. Handle Dirichlet (Fixed Temperature Wall/Inlet)
         if self.boundary[3] == 'D':
@@ -1341,7 +1341,7 @@ class ConvectiveFVM(DiffFVM):
         return stencil,b  
     
     def build_west(self, i, j):
-        stencil = np.zeros(self.n*self.m)
+        stencil = np.zeros(self.n*self.m, dtype=np.float64)
         b = 0.0
         # 1. Handle Dirichlet (Fixed Temperature Wall/Inlet)
         if self.boundary[2] == 'D':  # Using self.index 2 for west boundary
@@ -1429,7 +1429,7 @@ class ConvectiveFVM(DiffFVM):
         return stencil,b
     
     def build_NW(self, i, j):
-        stencil = np.zeros(self.n*self.m)
+        stencil = np.zeros(self.n*self.m, dtype=np.float64)
         b = 0.0
         
         # For NW corner, we need to consider both North and West boundary conditions
@@ -1813,8 +1813,8 @@ class FVMSolver:
         self.m, self.n = X.shape
         self.X = X
         self.Y = Y
-        self.A = np.zeros((self.n*self.m, self.n*self.m))
-        self.B = np.zeros(self.n*self.m)
+        self.A = np.zeros((self.n*self.m, self.n*self.m), dtype=np.float64)
+        self.B = np.zeros(self.n*self.m, dtype=np.float64)
         self.diffFVM = DiffFVM(X, Y, boundary, TD, q, alpha, Tinf, conductivity)
         self.convFVM = ConvectiveFVM(X, Y, boundary, TD, q, alpha, Tinf, conductivity, velocity_field, rho_field, cp_field)
         
