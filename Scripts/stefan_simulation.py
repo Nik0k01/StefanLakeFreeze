@@ -14,10 +14,9 @@ class StefanSimulation:
         self.steps_no = steps_no
         self.total_time = time_step * steps_no
         self.current_time = 0.0
-        dx = X[0,1] - X[0,0]
-        dy = Y[1,0] - Y[0,0]
-        self.cell_areas = np.ones(X.shape) * dx * dy
-
+        # dx = X[0,1] - X[0,0]
+        # dy = Y[1,0] - Y[0,0]
+        # self.cell_areas = np.ones(X.shape) * dx * dy
 
         self.T_field = initial_temp.copy()
         self.fl_field = FlField(X, Y)
@@ -34,11 +33,16 @@ class StefanSimulation:
         
         self.flHistory = []
         self.THistory = []
+        self.vHistory = [] # Initialize velocity history
+        self.vHistory.append(self.velocity_field.velocity_field.copy()) # Initial state
+        # self.energyHistory.append(self.calculate_total_domain_energy())
+        
         self.flHistory.append(self.fl_field.flField.copy())
         self.THistory.append(self.T_field.copy())
-        self.energyHistory = []
+        # self.energyHistory = []
         self.timeHistory = []
-        self.boundaryFluxHistory = []
+        self.timeHistory.append(self.current_time)
+        # self.boundaryFluxHistory = []
     
     def calculate_enthalpy(self, temperature_field):
         """
@@ -132,19 +136,8 @@ class StefanSimulation:
         return total_energy
     
     
-    
     def run(self):
         time_steps = int(self.total_time / self.dt)
-        self.vHistory = [] # Initialize velocity history
-        self.vHistory.append(self.velocity_field.velocity_field.copy()) # Initial state
-        
-        self.update_material_properties(self.fl_field.flField)
-        self.energyHistory.append(self.calculate_total_domain_energy())
-        self.timeHistory.append(self.current_time)
-        
-        
-
-        
 
         for step in range(time_steps):
             print(f"Time Step {step+1}/{time_steps}, Time: {self.current_time:.2f}s")
@@ -175,13 +168,14 @@ class StefanSimulation:
                     flFieldNew=fl_field_current_guess, # Reference t=n+1 (guess)
                     dt=self.dt
                 )
+                # Update Velocity Field based on current phase guess
                 self.velocity_field.velocity_field = self.velocity_field.generate_velocity_field(
                     fl_field_old,
                     fl_field_current_guess
                 )
-             
-                self.fvm_solver.velocity_field = self.velocity_field.velocity_field
-                
+                # Pass updated velocity to FVM solver
+                self.fvm_solver.convFVM.velocity_field = self.velocity_field.velocity_field
+                             
                 # --- STEP B: Solve Temperature ---
                 # The solver sees the heat released by the guessed freezing
                 T_field = self.fvm_solver.unsteady_solve(
@@ -221,36 +215,18 @@ class StefanSimulation:
             # Commit the final calculated values
             self.T_field = current_T_field
             self.fl_field.flField = fl_field_current_guess # Update the object state
-            # self.enthalpy_field = new_enthalpy
-            
-           
-            
-            
             self.flHistory.append(self.fl_field.flField.copy())
             self.THistory.append(self.T_field.copy())
             # storing the array 
             self.vHistory.append(self.velocity_field.velocity_field.copy()) 
-
-          
-            self.energyHistory.append(self.calculate_total_domain_energy())
-    
-
+            # self.energyHistory.append(self.calculate_total_domain_energy())
             
-            
-
-            
-            # if not converged:
-            #     print(f"Warning: Step {step} not converged. Residual: {diff}")
-        
-
             self.current_time += self.dt
             
             self.timeHistory.append(self.current_time)
 
     def plot_energy(self):
  
-
-
         # Create a figure with 1 row and 2 columns
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
 
@@ -275,12 +251,7 @@ class StefanSimulation:
         # Adjust layout to prevent label overlap
         plt.tight_layout()
         plt.show()
-    
-    
-
-   
-       
-            
+                
 # Example usage
 Lx, Ly = 0.1, 0.1
 dimX, dimY = 4, 4
@@ -292,11 +263,6 @@ steps_no = 15    # number of time steps to simulate
 
 simulation = StefanSimulation(mesh[0], mesh[1], initial_temp, time_step, steps_no)
 simulation.run()
-
-
-
-
-
 
 # Plot fl, Temperature, and Velocity histories
 for step in range(len(simulation.flHistory)):
@@ -358,4 +324,4 @@ for step in range(len(simulation.flHistory)):
 
 
 # --- ENERGY VERIFICATION PLOT ---
-simulation.plot_energy()
+# simulation.plot_energy()

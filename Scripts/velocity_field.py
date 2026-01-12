@@ -24,7 +24,7 @@ class velocityField():
         # m is the number of points in the second direction
         self.m, self.n = X.shape
         # m -> y or i , n -> x or j
-        self.velocity_field = np.array([[[0, 0] for x in range(self.n)] for y in range(self.m)])
+        self.velocity_field = np.array([[[0, 0] for x in range(self.n)] for y in range(self.m)], dtype=np.float64)
         self.top_flux = np.zeros((self.m, self.n))
         self.bottom_flux = np.zeros((self.m, self.n))
         
@@ -75,39 +75,30 @@ class velocityField():
    
 
     def generate_velocity_field(self, flFieldOld, flFieldNew):
-        dtflField = (flFieldNew - flFieldOld) / self.dt
-        
-        source_term = (self.rho_s - self.rho_l) / self.rho_l * dtflField 
-        
-        new_v_field = np.zeros((self.m, self.n, 2))
-        local_bottom_flux = np.zeros((self.m, self.n))
-
-        for i in range(self.m):
-            for j in range(self.n):
-                area_cell, dx, dy = self.choose_node(i, j)
-                
-                # Check top flux
-                t_flux = 0.0 if i == 0 else local_bottom_flux[i-1, j]
-                
-                # Update current flux
-                s_flux = source_term[i, j] * area_cell
-                local_bottom_flux[i, j] = t_flux + s_flux
-                
-                # Assign velocity
-                if area_cell > 0:
-                    new_v_field[i, j, 1] = local_bottom_flux[i, j] / area_cell
-                
-        self.velocity_field = new_v_field
-        
-        # FINAL CHECK
-        # v_max = np.max(np.abs(self.velocity_field[:,:,1]))
-        # print(f"--- DEBUG VELOCITY ---")
-        # print(f"Max dtfl: {np.max(np.abs(dtflField)):.2e}")
-        # print(f"Max Source: {np.max(np.abs(source_term)):.2e}")
-        # print(f"Max V: {v_max:.2e}")
-        
+        # Generate a velocity field based on the liquid fraction fields
+        dtflField = (flFieldNew - flFieldOld) / self.dt               # Time derivative of liquid fraction
+        source_term = -(self.rho_s - self.rho_l) / self.rho_l * dtflField        # Source term due to phase change
+        for i in range(self.m): # Starting from the top
+            for j in range(self.n): # Starting from the left
+                area_cell, dx_n, dx_s = self.choose_node(i, j)
+                flux_sum = source_term[i, j] * area_cell
+                if i == 0:
+                    top_flux = 0.0  # No flow through the top wall
+                else:
+                    top_flux = self.bottom_flux[i-1, j]
+                # Bottom flux is equal to the top plus the source term
+                bottom_flux = flux_sum + top_flux
+                # Update bottom flux 
+                self.bottom_flux[i, j] = bottom_flux
+                # Calculate velocities at the node
+                top_velocity = top_flux / dx_n
+                bottom_velocity = bottom_flux / dx_s
+                # Average velocity, check the direction
+                sign = 1 - 2 * int(top_velocity > bottom_velocity)
+                node_velocity = sign * (abs(top_velocity) + abs(bottom_velocity)) / 2
+                self.velocity_field[i, j, 0] = 0.0  # Assuming vertical flow only
+                self.velocity_field[i, j, 1] = node_velocity
         return self.velocity_field
-
         
     
     def build_inner(self, i, j):
