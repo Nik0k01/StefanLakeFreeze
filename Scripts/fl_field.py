@@ -1,7 +1,7 @@
 import numpy as np
 
 class FlField():
-    def __init__(self, X, Y, rho_s=981., rho_l=1000., L_f=2000, cp_s=2000, cp_l=4181, T_melt=273.15):
+    def __init__(self, X, Y, rho_s=917., rho_l=1000., L_f=334000., cp_s=2090, cp_l=4181, T_melt=273.15):
         self.X = X
         self.Y = Y
         self.rho_s = rho_s

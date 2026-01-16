@@ -1,7 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-
 class Coordinate2D():
     def __init__(self, x, y):
         self.x = x
@@ -148,11 +147,11 @@ class DiffFVM():
         nw = Coordinate2D((Nw.x + w.x)/2, (Nw.y + w.y)/2)
         
         # calculate the area of the cell
-        S_P = np.abs(self.calculate_area(ne, se, sw, nw))
-        S_n = np.abs(self.calculate_area(Ne, e, w, Nw))
-        S_s = np.abs(self.calculate_area(e, Se, Sw, w))
-        S_w = np.abs(self.calculate_area(n, s, sW, nW))
-        S_e = np.abs(self.calculate_area(nE, sE, s, n))
+        S_P = (self.calculate_area(ne, se, sw, nw))
+        S_n = (self.calculate_area(Ne, e, w, Nw))
+        S_s = (self.calculate_area(e, Se, Sw, w))
+        S_w = (self.calculate_area(n, s, sW, nW))
+        S_e = (self.calculate_area(nE, sE, s, n))
         
 
         D3 = ((self.dx(se, ne) * (self.dx(nE, n)/4 + self.dx(s, sE)/4 + self.dx(sE, nE))) / S_e + 
@@ -480,11 +479,6 @@ class DiffFVM():
             else:
                 raise ValueError('Unknown boundary type: %s' % self.boundary[0])
             
-            # calculate the area of the cell
-            S_ee = self.calculate_area(s, sw, nw, n)
-            S_e = self.calculate_area(s, sW, nW, n)
-            S_ees = self.calculate_area(S, Sw, w, P)
-            S_een = self.calculate_area(N, P, w, Nw)
             # w->s, e->n,
             D0 = (coefficient * self.dist(nw, sw) +
                 self.dy(sw, s) * (self.dy(w, Sw) / 4 + 3 * self.dy(P, w) / 4 + self.dy(S, P) / 2) / S_ees +
@@ -817,8 +811,8 @@ class DiffFVM():
             # --- D2 (Northeast) coefficient (Mirrored from SE's D_4) ---
             D2 = (self.dy(ne, n) * (self.dy(Ne, N) / 4 + self.dy(e, Ne) / 4) / S_swn +
                   self.dx(ne, n) * (self.dx(Ne, N) / 4 + self.dx(e, Ne) / 4) / S_swn +
-                  self.dy(ne, e) * (self.dy(nE, n) / 4 + self.dy(E, nE) / 4) / S_swe +
-                  self.dx(ne, e) * (self.dx(nE, n) / 4 + self.dx(E, nE) / 4) / S_swe
+                  self.dy(e, ne) * (self.dy(nE, n) / 4 + self.dy(E, nE) / 4) / S_swe +
+                  self.dx(e, ne) * (self.dx(nE, n) / 4 + self.dx(E, nE) / 4) / S_swe
                  ) / S_sw
 
             # Calculate boundary contributions
@@ -1079,11 +1073,6 @@ class ConvectiveFVM(DiffFVM):
     def build_north(self, i, j):
         stencil = np.zeros(self.n*self.m, dtype=np.float64)
         b = 0.0
-        # 1. Handle Dirichlet (Fixed Temperature Wall/Inlet)
-        if self.boundary[0] == 'D':
-            stencil[self.index(i, j)] = 1.0
-            b = self.TD[0]
-            return stencil, b
     
         # 2. General Flux Handling (Neumann / Mixed / Wall)
         
@@ -1168,11 +1157,6 @@ class ConvectiveFVM(DiffFVM):
     def build_south(self, i, j):
         stencil = np.zeros(self.n*self.m, dtype=np.float64)
         b = 0.0
-        # 1. Handle Dirichlet (Fixed Temperature Wall/Inlet)
-        if self.boundary[1] == 'D':
-            stencil[self.index(i, j)] = 1.0
-            b = self.TD[1]
-            return stencil, b
         # 2. General Flux Handling (Neumann / Mixed / Wall)
         # principle node coordinate
         P = Coordinate2D(self.X[i, j], self.Y[i, j])
@@ -1255,11 +1239,6 @@ class ConvectiveFVM(DiffFVM):
     def build_east(self, i, j):
         stencil = np.zeros(self.n*self.m, dtype=np.float64)
         b = 0.0
-        # 1. Handle Dirichlet (Fixed Temperature Wall/Inlet)
-        if self.boundary[3] == 'D':
-            stencil[self.index(i, j)] = 1.0
-            b = self.TD[3]
-            return stencil, b
     
         # 2. General Flux Handling (Neumann / Mixed / Wall)
         # principle node coordinate
@@ -1343,11 +1322,6 @@ class ConvectiveFVM(DiffFVM):
     def build_west(self, i, j):
         stencil = np.zeros(self.n*self.m, dtype=np.float64)
         b = 0.0
-        # 1. Handle Dirichlet (Fixed Temperature Wall/Inlet)
-        if self.boundary[2] == 'D':  # Using self.index 2 for west boundary
-            stencil[self.index(i, j)] = 1.0
-            b = self.TD[2]
-            return stencil, b
         # 2. General Flux Handling (Neumann / Mixed / Wall)
         # principle node coordinate
         P = Coordinate2D(self.X[i, j], self.Y[i, j])
@@ -1431,12 +1405,6 @@ class ConvectiveFVM(DiffFVM):
     def build_NW(self, i, j):
         stencil = np.zeros(self.n*self.m, dtype=np.float64)
         b = 0.0
-        
-        # For NW corner, we need to consider both North and West boundary conditions
-        if self.boundary[0] == 'D' or self.boundary[2] == 'D':  # If either boundary is Dirichlet
-            stencil[self.index(i, j)] = 1.0
-            b = self.TD[0] if self.boundary[0] == 'D' else self.TD[2]
-            return stencil, b
         # principle node coordinates
         P = Coordinate2D(self.X[i, j], self.Y[i, j])
         S = Coordinate2D(self.X[i+1, j], self.Y[i+1, j])
@@ -1522,14 +1490,6 @@ class ConvectiveFVM(DiffFVM):
     def build_NE(self, i, j):
         stencil = np.zeros(self.n * self.m)
         b = 0.0
-        
-        # 1. DIRICHLET OVERRIDE (Fixed Temperature)
-        # Check North (0) and East (3)
-        if self.boundary[0] == 'D' or self.boundary[3] == 'D': 
-            stencil[self.index(i, j)] = 1.0
-            # Prioritize North, else East
-            b = self.TD[0] if self.boundary[0] == 'D' else self.TD[3]
-            return stencil, b
 
         # 2. GEOMETRY SETUP
         # Principle node coordinates
@@ -1548,8 +1508,7 @@ class ConvectiveFVM(DiffFVM):
         sw = Coordinate2D((Sw.x + w.x)/2, (Sw.y + w.y)/2)
 
         # Calculate Area
-        # Loop CCW: P -> w -> sw -> s
-        S_ne = abs(self.calculate_area(P, w, sw, s))
+        S_ne = self.calculate_area(P, s, sw, w)
         
         # Get properties
         rho = self.rho[i, j]
@@ -1618,14 +1577,6 @@ class ConvectiveFVM(DiffFVM):
     def build_SW(self, i, j):
         stencil = np.zeros(self.n * self.m)
         b = 0.0
-        
-        # 1. DIRICHLET OVERRIDE
-        # Check South (1) and West (2)
-        if self.boundary[1] == 'D' or self.boundary[2] == 'D': 
-            stencil[self.index(i, j)] = 1.0
-            # Prioritize South, else West
-            b = self.TD[1] if self.boundary[1] == 'D' else self.TD[2]
-            return stencil, b
 
         # 2. GEOMETRY SETUP
         # Principle node coordinates
@@ -1714,14 +1665,6 @@ class ConvectiveFVM(DiffFVM):
     def build_SE(self, i, j):
         stencil = np.zeros(self.n * self.m)
         b = 0.0
-        
-        # 1. DIRICHLET OVERRIDE
-        # Check South (1) and East (3)
-        if self.boundary[1] == 'D' or self.boundary[3] == 'D': 
-            stencil[self.index(i, j)] = 1.0
-            # Prioritize South, else East
-            b = self.TD[1] if self.boundary[1] == 'D' else self.TD[3]
-            return stencil, b
 
         # 2. GEOMETRY SETUP
         # Principle node coordinates
@@ -1863,10 +1806,8 @@ class FVMSolver:
             elif source_type == 'stefan':
                 # Stefan source term implementation 
                 source_term = (flFieldNew - flFieldOld) / dt
-                # Mixed density based on phase field
-                rho = rho_s  + flFieldNew * (rho_l - rho_s)
                 # Energy is released when water is freezing
-                source_term *= rho_l * L_f
+                source_term *= (rho_l * L_f)
                 # Add to the flattened B vector
                 self.B += source_term.flatten()
             else:
@@ -1890,7 +1831,7 @@ class FVMSolver:
         implicit_B = T_initial - dt * self.B
         # Number of time steps
         steps = int(t_end/dt)
-        print(f"Total time steps: {steps}")
+        # print(f"Total time steps: {steps}")
         # 3D array to store temperature history
         if steps > 1:
             max_size = 1                                  # Maximum 1 time steps
