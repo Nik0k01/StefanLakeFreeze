@@ -19,6 +19,7 @@ class velocityField():
         self.rho_l = rho_l
         self.rho_s = rho_s
         self.dt = dt
+        self.cell_areas = np.zeros_like(X, dtype=np.float64)
 
         # n is the number of points in the first direction
         # m is the number of points in the second direction
@@ -81,6 +82,7 @@ class velocityField():
         for i in range(self.m): # Starting from the top
             for j in range(self.n): # Starting from the left
                 area_cell, dx_n, dx_s = self.choose_node(i, j)
+                self.cell_areas[i, j] = area_cell
                 flux_sum = source_term[i, j] * area_cell
                 if i == 0:
                     top_flux = 0.0  # No flow through the top wall
