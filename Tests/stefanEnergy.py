@@ -238,8 +238,13 @@ for step in range(steps_no):
     # Simple Gradient approximation for top boundary flux
     flux_watts = q * Lx  # W/m * m = W
     
-    total_energy_extracted += np.abs(flux_watts * simulation.dt)
-
+    outflow_enthalpy = (simulation.velocity_field.velocity_field[-1, :, 1] * 
+                        simulation.fvm_solver.convFVM.rho[-1, :] *
+                        (simulation.fvm_solver.convFVM.cp[-1, :] * 
+                         (simulation.T_field[-1, :] - 273.15) + 
+                         simulation.fl_field.L_f) 
+                        ) * simulation.dt * Lx
+    total_energy_extracted += np.abs(flux_watts * simulation.dt) + np.abs(outflow_enthalpy.sum())
     # 2. Calculate Current System Enthalpy
     current_total_enthalpy = np.sum(simulation.calculate_enthalpy(simulation.T_field) * simulation.velocity_field.cell_areas)
     
@@ -288,5 +293,6 @@ plt.grid()
 plt.xlabel("Cumulative Iteration (across all time steps)")
 plt.ylabel("Max fl field difference")
 plt.title("FL Field Convergence")
+plt.yscale('log')
 plt.tight_layout()
 plt.show()
