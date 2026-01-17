@@ -5,7 +5,7 @@ from Scripts.fvm_solver import Coordinate2D
 
 class velocityField():
 
-    def __init__(self, X, Y, rho_l=1000, rho_s=981, dt=0.1):
+    def __init__(self, X, Y, rho_l=1000, rho_s=917, dt=0.1):
         # X, Y is the mesh
         # boundary conditions - wall at the top, no flow on the sides, open at the bottom
         # flFieldOld - liquid fraction field at previous time step

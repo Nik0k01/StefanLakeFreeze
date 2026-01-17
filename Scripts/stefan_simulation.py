@@ -147,8 +147,8 @@ class StefanSimulation:
         :param self: Description
         :param T_field: 2D numpy array of temperature values
         """
-        cp_l = 4200.0
-        cp_s = 2100.0  # Make sure this matches your simulation setup
+        cp_l = 4181.0
+        cp_s = 2090.0  
         Lf = 334000.0
         cp_eff = fl_field_guess * cp_l + (1.0 - fl_field_guess) * cp_s
         
