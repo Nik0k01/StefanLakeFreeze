@@ -98,8 +98,8 @@ dimX, dimY = 3, 3
 X, Y = setUpMesh(dimX, dimY, l, formfunction, shape)
 initial_temp = np.ones((dimY, dimX)) * 273.15 + 0.1  # Initial temperature field (in Kelvin)
 
-time_step = 1    # seconds
-steps_no = 50    # number of time steps to simulate
+time_step = 0.1    # seconds
+steps_no = 100    # number of time steps to simulate
 q=-2000
 simulation = stefan_simulation.StefanSimulation(X, Y, initial_temp, time_step, steps_no, q=[q, 0, 0, 0])
 simulation.velocity_field.generate_velocity_field(simulation.fl_field.flField, simulation.fl_field.flField)
@@ -192,6 +192,12 @@ for step in range(steps_no):
         # (Assuming you have a function that returns f based on T or H)
         fl_previous_guess = fl_field_current_guess.copy()
         fl_field_current_guess = simulation.fl_correction(current_T_field, fl_previous_guess)
+        
+        # --- STEP E: Update Guess for next iteration ---
+        # Don't just swap them; use under-relaxation to prevent oscillations
+        # f_new = f_old + omega * (f_calc - f_old)
+        relax = 0.1
+        fl_field_current_guess = fl_previous_guess + relax * (fl_field_current_guess - fl_previous_guess)
                 
         # --- STEP D: Check Convergence ---
         # Did our guess match the result?
@@ -204,11 +210,6 @@ for step in range(steps_no):
         if iteration == (max_iterations - 1):
             print('Failed to converge!')
         
-        # --- STEP E: Update Guess for next iteration ---
-        # Don't just swap them; use under-relaxation to prevent oscillations
-        # f_new = f_old + omega * (f_calc - f_old)
-        relax = 0.4 
-        fl_field_current_guess = fl_field_old + relax * (fl_field_current_guess - fl_field_old)
         
         simulation.fvm_solver.B = 0.0 # Reset the LHS for next iteration
         

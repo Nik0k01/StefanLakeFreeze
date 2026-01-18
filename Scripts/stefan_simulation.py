@@ -143,31 +143,34 @@ class StefanSimulation:
     def fl_correction(self, T_current, fl_field_guess):
         """
         Correction of the phase field based on the temperature field.
-        
-        :param self: Description
-        :param T_field: 2D numpy array of temperature values
         """
         cp_l = 4181.0
         cp_s = 2090.0  
         Lf = 334000.0
+        
+        # Calculate effective Cp based on current guess
         cp_eff = fl_field_guess * cp_l + (1.0 - fl_field_guess) * cp_s
         
-        if np.any(T_current < 273.15):
-            # Calculate change in temperature
-            delta_T = T_current - 273.15
-            # Check where is liquid
-            liquid_mask = fl_field_guess > 0.0
-            # Calculate change in liquid fraction
-            delta_fl = cp_eff * delta_T / Lf
-            # If liquid fraction increases, skip - we only freeze
-            delta_fl = np.where(delta_fl < 0.0, delta_fl, 0.0)
-            # If temperature is above melting, skip
-            delta_fl = np.where(T_current < 273.15, delta_fl, 0.0)
-            # Only update where there is liquid
-            delta_fl[~liquid_mask] = 0.0
-            return np.clip(fl_field_guess + delta_fl, 0.0, 1.0)
-        else:
-            return fl_field_guess.copy()
+        # Calculate temperature deviation from melting point
+        delta_T = T_current - 273.15
+        
+        # Calculate required change in liquid fraction to absorb/release this heat
+        # dH = rho * L * dfl  approx  rho * cp * dT
+        # Therefore: dfl = (cp * dT) / L
+        # Note: This is an approximation for the iterative update
+        delta_fl = cp_eff * delta_T / Lf
+        
+        # REMOVED: The constraints that forced delta_fl < 0
+        # We allow delta_fl to be positive (melting) to correct numerical overshoots
+        
+        # Only update physically meaningful cells (e.g. within [0,1])
+        # But usually, just clipping the result is sufficient.
+        
+        # Apply the change
+        fl_new = fl_field_guess + delta_fl
+        
+        # Hard Clip to [0, 1] acts as the ultimate physical constraint
+        return np.clip(fl_new, 0.0, 1.0)
     
     def update_material_properties(self, fl_guess):
         """
