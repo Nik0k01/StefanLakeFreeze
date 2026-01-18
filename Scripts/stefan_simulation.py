@@ -222,7 +222,7 @@ class StefanSimulation:
             converged = False
             iteration = 0
             max_iterations = 100 # usually converges fast
-            tolerance = 1e-12
+            tolerance = 1e-6
 
             while not converged and iteration < max_iterations:
                 
@@ -264,19 +264,18 @@ class StefanSimulation:
                 fl_previous_guess = fl_field_current_guess.copy()
                 fl_field_current_guess = self.fl_correction(current_T_field, fl_previous_guess)
                
+                # Don't just swap them; use under-relaxation to prevent oscillations
+                # f_new = f_old + omega * (f_calc - f_old)
+                relax = 0.1
+                fl_field_current_guess = fl_field_old + relax * (fl_field_current_guess - fl_field_old)
+
                          
                 # --- STEP D: Check Convergence ---
                 # Did our guess match the result?
-                diff = np.max(np.abs(fl_field_old - fl_field_current_guess))
+                diff = np.max(np.abs(fl_previous_guess - fl_field_current_guess))
                 if diff < tolerance:
                     converged = True
-                
-                # --- STEP E: Update Guess for next iteration ---
-                # Don't just swap them; use under-relaxation to prevent oscillations
-                # f_new = f_old + omega * (f_calc - f_old)
-                relax = 0.2 
-                fl_field_current_guess = fl_field_old + relax * (fl_field_current_guess - fl_field_old)
-                
+                                                
                 self.fvm_solver.B = 0.0 # Reset the LHS for next iteration
                 
                 iteration += 1
@@ -459,7 +458,7 @@ if __name__ == "__main__":
     X, Y = setUpMesh(dimX, dimY, Lx, formfunction, shape)    
     initial_temp = np.ones((dimY, dimX)) * 273.15 + 0.1  # Initial temperature field (in Kelvin)
     time_step = 1  # seconds
-    steps_no = 100    # number of time steps to simulate
+    steps_no = 2000    # number of time steps to simulate
 
     simulation = StefanSimulation(X, Y, initial_temp, time_step, steps_no, q)
     simulation.run()
