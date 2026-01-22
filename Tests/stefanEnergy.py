@@ -96,12 +96,16 @@ l = 0.1
 Lx, Ly = 0.1, 0.1
 dimX, dimY = 3, 3
 X, Y = setUpMesh(dimX, dimY, l, formfunction, shape)
-initial_temp = np.ones((dimY, dimX)) * 273.15 + 0.1  # Initial temperature field (in Kelvin)
+initial_temp = np.ones((dimY, dimX)) * 273.15 # Initial temperature field (in Kelvin)
+initial_temp[int(dimY/2):, :] += 0.1
+initial_temp[:int(dimY/2), :] -= 0.1
+fl_field_init = np.ones((dimY, dimX))
+fl_field_init[:int(dimY/2),:] = 0.0
 
-time_step = 0.1    # seconds
-steps_no = 100    # number of time steps to simulate
+time_step = 1    # seconds
+steps_no = 2000    # number of time steps to simulate
 q=-2000
-simulation = stefan_simulation.StefanSimulation(X, Y, initial_temp, time_step, steps_no, q=[q, 0, 0, 0])
+simulation = stefan_simulation.StefanSimulation(X, Y, initial_temp, time_step, steps_no, q=[q, 0, 0, 0], fl_field_init=fl_field_init)
 simulation.velocity_field.generate_velocity_field(simulation.fl_field.flField, simulation.fl_field.flField)
 # Initialize accumulators
 total_energy_extracted = 0.0
@@ -143,7 +147,8 @@ for step in range(steps_no):
     # 2. Initialize guess for the new field
     # Start by assuming nothing changes (or use last step's rate)
     fl_field_current_guess = fl_field_old.copy()
-    
+    # Update material properties
+    simulation.update_material_properties(fl_field_current_guess)
     rho_cp_old_step = simulation.fvm_solver.convFVM.rho * simulation.fvm_solver.convFVM.cp
     
     converged = False
@@ -286,14 +291,14 @@ plt.ylabel("Relative error")
 plt.title("Step error history")
 plt.show()
 
-plt.figure(figsize=(10, 6))
-# Flatten convergence history into a single line, combining all time steps
-fl_convergence_flat = np.concatenate(fl_convergence_history)
-plt.plot(fl_convergence_flat, linewidth=1.5)
-plt.grid()
-plt.xlabel("Cumulative Iteration (across all time steps)")
-plt.ylabel("Max fl field difference")
-plt.title("FL Field Convergence")
-plt.yscale('log')
-plt.tight_layout()
-plt.show()
+# plt.figure(figsize=(10, 6))
+# # Flatten convergence history into a single line, combining all time steps
+# fl_convergence_flat = np.concatenate(fl_convergence_history)
+# plt.plot(fl_convergence_flat)
+# plt.grid()
+# plt.xlabel("Cumulative Iteration (across all time steps)")
+# plt.ylabel("Max fl field difference")
+# plt.title("FL Field Convergence")
+# plt.yscale('log')
+# plt.tight_layout()
+# plt.show()

@@ -86,7 +86,7 @@ def setUpMesh(nodes_x, nodes_y, length, formfunction, shape):
 
 
 class StefanSimulation:
-    def __init__(self, X, Y, initial_temp, time_step, steps_no, q):
+    def __init__(self, X, Y, initial_temp, time_step, steps_no, q, fl_field_init):
         self.X = X
         self.Y = Y
         self.dt = time_step
@@ -98,7 +98,7 @@ class StefanSimulation:
         # self.cell_areas = np.ones(X.shape) * dx * dy
 
         self.T_field = initial_temp.copy()
-        self.fl_field = FlField(X, Y)
+        self.fl_field = FlField(X, Y, fl_field_init)
         self.enthalpy_field = self.calculate_enthalpy(self.T_field)
         self.velocity_field = velocityField(X, Y, dt=self.dt)
         
@@ -217,6 +217,7 @@ class StefanSimulation:
             # 2. Initialize guess for the new field
             # Start by assuming nothing changes (or use last step's rate)
             fl_field_current_guess = fl_field_old.copy()
+            self.update_material_properties(fl_field_current_guess)
             rho_cp_old_step = self.fvm_solver.convFVM.rho * self.fvm_solver.convFVM.cp
             
             converged = False
@@ -453,13 +454,17 @@ if __name__ == "__main__":
     # Example usage
     Lx, Ly = 0.1, 0.1
     shape =  'rectangular'
-    dimX, dimY = 4, 4
+    dimX, dimY = 4, 24
     q = [-2000, 0, 0, 0]
     X, Y = setUpMesh(dimX, dimY, Lx, formfunction, shape)    
-    initial_temp = np.ones((dimY, dimX)) * 273.15 + 0.1  # Initial temperature field (in Kelvin)
+    initial_temp = np.ones((dimY, dimX)) * 273.15 # Initial temperature field (in Kelvin)
+    initial_temp[int(dimY/2):, :] += 0.1
+    initial_temp[:int(dimY/2), :] -= 0.1
+    fl_field_init = np.ones((dimY, dimX))
+    fl_field_init[:int(dimY/2),:] = 0.0
     time_step = 1  # seconds
-    steps_no = 2000    # number of time steps to simulate
+    steps_no = 5000    # number of time steps to simulate
 
-    simulation = StefanSimulation(X, Y, initial_temp, time_step, steps_no, q)
+    simulation = StefanSimulation(X, Y, initial_temp, time_step, steps_no, q, fl_field_init)
     simulation.run()
     simulation.animate_field(interval=200, filename='stefan_simulation.mp4')
