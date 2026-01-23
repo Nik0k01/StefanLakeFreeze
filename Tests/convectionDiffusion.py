@@ -23,14 +23,14 @@ u = 1.0
 T_exact = [analytical_solution(x, L, 1.0, 1.0, u, k) for x in x_coords]
 
 # Simple rectangular mesh
-dimX, dimY = 3, 3
+dimX, dimY = 40, 3
 mesh = np.meshgrid(np.linspace(0, L, dimX), np.linspace(0, 0.1, dimY))
 rho = np.ones((dimY, dimX)) * 1.0                                           # Density field
 cp = np.ones((dimY, dimX)) * 1.0                                            # Specific heat capacity field
 k = np.ones((dimY, dimX)) * k                                             # Thermal conductivity field
 u = np.array([[[-u, 0] for x in range(dimX)] for y in range(dimY)])                   # Velocity field
 
-boundary =   ['N', 'N', 'D', 'D'] # [N,S,W,E] : D : Dirichlet, N : Neumann, R : Robin
+boundary =   ['N', 'N', 'N', 'D'] # [N,S,W,E] : D : Dirichlet, N : Neumann, R : Robin
 TD =  [0, 0, 0, 1] # [N,S,W,E]
 alpha = 20
 Tinf = 90

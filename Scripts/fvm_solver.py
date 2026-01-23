@@ -1814,15 +1814,39 @@ class FVMSolver:
     def solve(self):
         for i in range(self.m):
             for j in range(self.n):
-                # Set stencil for the node
                 k = self.diffFVM.index(i, j)
+                
+                # Check if this node is a Dirichlet Boundary
+                is_dirichlet = False
+                
+                # North Boundary (i=0)
+                if i == 0 and 'D' in self.diffFVM.boundary[0]: 
+                    is_dirichlet = True
+                # South Boundary (i=m-1)
+                elif i == self.m - 1 and 'D' in self.diffFVM.boundary[1]:
+                    is_dirichlet = True
+                # West Boundary (j=0)
+                elif j == 0 and 'D' in self.diffFVM.boundary[2]:
+                    is_dirichlet = True
+                # East Boundary (j=n-1)
+                elif j == self.n - 1 and 'D' in self.diffFVM.boundary[3]:
+                    is_dirichlet = True
+                
+                # Fetch Stencils
                 a_diff, b_diff = self.diffFVM.set_stencil(i, j)
                 a_conv, b_conv = self.convFVM.set_stencil(i, j)
-                self.A[k, :] = a_diff + a_conv
-                self.B[k] = b_diff + b_conv
+
+                if is_dirichlet:
+                    # IGNORE Convection. The Diffusion part already sets T = T_wall
+                    self.A[k, :] = a_diff 
+                    self.B[k] = b_diff
+                else:
+                    # For Inner nodes or Flux boundaries, ADD them
+                    self.A[k, :] = a_diff + a_conv
+                    self.B[k] = b_diff + b_conv
+                    
         T = np.linalg.solve(self.A, self.B)        
-        dimY, dimX = self.m, self.n
-        return T.reshape(dimY, dimX)
+        return T.reshape(self.m, self.n)
     
     def implicit_scheme(self, T_initial, t_end, dt):
         implicit_A = np.eye(self.m * self.n) - dt * self.A
