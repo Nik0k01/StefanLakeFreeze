@@ -1226,7 +1226,7 @@ class ConvectiveFVM(DiffFVM):
         # If F_N < 0 (Inflow), we are bringing in enthalpy from outside.
         # We need the temperature of that incoming fluid (T_inf or T_boundary).
         if F_S < 0:
-            T_inlet = self.TD[0] # Assuming boundary temp is stored here
+            T_inlet = self.TD[1] # Assuming boundary temp is stored here
             b += (-F_S * T_inlet) / S_nn
             
         stencil[self.index(i, j)] = D0
@@ -1303,7 +1303,7 @@ class ConvectiveFVM(DiffFVM):
         # If F_E < 0 (Inflow), we are bringing in enthalpy from outside.
         # We need the temperature of that incoming fluid (T_inf or T_boundary).
         if F_E < 0:
-            T_inlet = self.TD[0] # Assuming boundary temp is stored here
+            T_inlet = self.TD[3] # Assuming boundary temp is stored here
             b += (-F_E * T_inlet) / S_ee
         
         # Center (P)
@@ -1386,7 +1386,7 @@ class ConvectiveFVM(DiffFVM):
         # If F_W < 0 (Inflow), we are bringing in enthalpy from outside.
         # We need the temperature of that incoming fluid (T_inf or T_boundary).
         if F_W < 0:
-            T_inlet = self.TD[0] # Assuming boundary temp is stored here
+            T_inlet = self.TD[2] # Assuming boundary temp is stored here
             b += (-F_W * T_inlet) / S_ww
         
         # Center (P)
@@ -1595,8 +1595,7 @@ class ConvectiveFVM(DiffFVM):
         ne = Coordinate2D((Ne.x + e.x)/2, (Ne.y + e.y)/2)
 
         # Calculate Area
-        # Loop CCW: P -> e -> ne -> n
-        S_sw = abs(self.calculate_area(P, e, ne, n))
+        S_sw = (self.calculate_area(n, ne, e, P))
         
         # Get properties
         rho = self.rho[i, j]
@@ -1684,8 +1683,7 @@ class ConvectiveFVM(DiffFVM):
         nw = Coordinate2D((Nw.x + w.x)/2, (Nw.y + w.y)/2)
 
         # Calculate Area
-        # Loop CCW: P -> n -> nw -> w
-        S_se = abs(self.calculate_area(P, n, nw, w))
+        S_se = (self.calculate_area(P, w, nw, n))
         
         # Get properties
         rho = self.rho[i, j]

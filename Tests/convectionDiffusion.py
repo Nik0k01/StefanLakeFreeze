@@ -23,7 +23,7 @@ u = 1.0
 T_exact = [analytical_solution(x, L, 1.0, 1.0, u, k) for x in x_coords]
 
 # Simple rectangular mesh
-dimX, dimY = 200, 3
+dimX, dimY = 3, 3
 mesh = np.meshgrid(np.linspace(0, L, dimX), np.linspace(0, 0.1, dimY))
 rho = np.ones((dimY, dimX)) * 1.0                                           # Density field
 cp = np.ones((dimY, dimX)) * 1.0                                            # Specific heat capacity field

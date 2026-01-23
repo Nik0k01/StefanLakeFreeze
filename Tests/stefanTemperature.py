@@ -96,7 +96,7 @@ fl_field_init = np.ones((dimY, dimX))
 fl_field_init[:int(dimY/2),:] = 0.0
     
 time_step = 0.01  # seconds
-steps_no = 10000    # number of time steps to simulate
+steps_no = 20000    # number of time steps to simulate
 
 simulation = stefan_simulation.StefanSimulation(X, Y, initial_temp, time_step, steps_no, q=[-2000, 0, 0, 0], fl_field_init=fl_field_init)
 simulation.run()
@@ -153,6 +153,7 @@ ax.legend(loc='best', fontsize=10, framealpha=0.9)
 plt.tight_layout()
 plt.show()
 
+print(T_profile)
 # Liquid Fraction domain plot - Liquid Fraction vs Depth for 10 different time steps
 fig, ax = plt.subplots(figsize=(10, 6))
 
@@ -175,3 +176,4 @@ ax.grid(True, alpha=0.3, linestyle='--')
 ax.legend(loc='best', fontsize=10, framealpha=0.9)
 plt.tight_layout()
 plt.show()
+
