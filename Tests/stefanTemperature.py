@@ -90,7 +90,8 @@ dimX, dimY = 4, 24
 X, Y = setUpMesh(dimX, dimY, l, formfunction, shape)
 initial_temp = np.ones((dimY, dimX)) * 273.15 # Initial temperature field (in Kelvin)
 initial_temp[int(dimY/2):, :] += 0.1
-initial_temp[:int(dimY/2), :] -= 0.1
+x = np.linspace(230, 273, int(dimY/2))[:, None]
+initial_temp[:int(dimY/2), :] = x
 fl_field_init = np.ones((dimY, dimX))
 fl_field_init[:int(dimY/2),:] = 0.0
     

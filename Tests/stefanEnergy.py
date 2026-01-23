@@ -94,16 +94,17 @@ l = 0.1
 
 # Example usage
 Lx, Ly = 0.1, 0.1
-dimX, dimY = 3, 3
+dimX, dimY = 4, 24
 X, Y = setUpMesh(dimX, dimY, l, formfunction, shape)
 initial_temp = np.ones((dimY, dimX)) * 273.15 # Initial temperature field (in Kelvin)
 initial_temp[int(dimY/2):, :] += 0.1
-initial_temp[:int(dimY/2), :] -= 0.1
+x = np.linspace(230, 273, int(dimY/2))[:, None]
+initial_temp[:int(dimY/2), :] = x
 fl_field_init = np.ones((dimY, dimX))
 fl_field_init[:int(dimY/2),:] = 0.0
 
 time_step = 1    # seconds
-steps_no = 2000    # number of time steps to simulate
+steps_no = 100    # number of time steps to simulate
 q=-2000
 simulation = stefan_simulation.StefanSimulation(X, Y, initial_temp, time_step, steps_no, q=[q, 0, 0, 0], fl_field_init=fl_field_init)
 simulation.velocity_field.generate_velocity_field(simulation.fl_field.flField, simulation.fl_field.flField)
@@ -153,7 +154,7 @@ for step in range(steps_no):
     
     converged = False
     iteration = 0
-    max_iterations = 100 # usually converges fast
+    max_iterations = 30 # usually converges fast
     tolerance = 1e-6
     print(f"Step {step}", file=f)
     fl_convergence_step = []  # Track convergence for this step

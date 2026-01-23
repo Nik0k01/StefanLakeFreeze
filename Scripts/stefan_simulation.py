@@ -222,7 +222,7 @@ class StefanSimulation:
             
             converged = False
             iteration = 0
-            max_iterations = 100 # usually converges fast
+            max_iterations = 30 # usually converges fast
             tolerance = 1e-6
 
             while not converged and iteration < max_iterations:
@@ -460,6 +460,8 @@ if __name__ == "__main__":
     initial_temp = np.ones((dimY, dimX)) * 273.15 # Initial temperature field (in Kelvin)
     initial_temp[int(dimY/2):, :] += 0.1
     initial_temp[:int(dimY/2), :] -= 0.1
+    # x = np.linspace(230, 273, int(dimY/2))[:, None]
+    # initial_temp[:int(dimY/2), :] = x
     fl_field_init = np.ones((dimY, dimX))
     fl_field_init[:int(dimY/2),:] = 0.0
     time_step = 1  # seconds
