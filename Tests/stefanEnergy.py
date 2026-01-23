@@ -94,7 +94,7 @@ l = 0.1
 
 # Example usage
 Lx, Ly = 0.1, 0.1
-dimX, dimY = 4, 24
+dimX, dimY = 4, 48
 X, Y = setUpMesh(dimX, dimY, l, formfunction, shape)
 initial_temp = np.ones((dimY, dimX)) * 273.15 # Initial temperature field (in Kelvin)
 initial_temp[int(dimY/2):, :] += 0.1
@@ -103,11 +103,14 @@ initial_temp[:int(dimY/2), :] = x
 fl_field_init = np.ones((dimY, dimX))
 fl_field_init[:int(dimY/2),:] = 0.0
 
-time_step = 1    # seconds
-steps_no = 100    # number of time steps to simulate
+time_step = 0.01    # seconds
+steps_no = 2000    # number of time steps to simulate
 q=-2000
 simulation = stefan_simulation.StefanSimulation(X, Y, initial_temp, time_step, steps_no, q=[q, 0, 0, 0], fl_field_init=fl_field_init)
-simulation.velocity_field.generate_velocity_field(simulation.fl_field.flField, simulation.fl_field.flField)
+simulation.update_material_properties(fl_field_init)
+simulation.velocity_field.generate_velocity_field(simulation.fl_field.flField, 
+                                                  simulation.fl_field.flField,
+                                                  simulation.fvm_solver.convFVM.rho)
 # Initialize accumulators
 total_energy_extracted = 0.0
 initial_total_enthalpy = np.sum(simulation.calculate_enthalpy(simulation.T_field) * simulation.velocity_field.cell_areas)
@@ -175,7 +178,8 @@ for step in range(steps_no):
         # Update Velocity Field based on current phase guess
         simulation.velocity_field.velocity_field = simulation.velocity_field.generate_velocity_field(
             fl_field_old,
-            fl_field_current_guess
+            fl_field_current_guess,
+            simulation.fvm_solver.convFVM.rho
         )
         
         T_initial_conservative = simulation.T_field * (rho_cp_old_step / rho_cp_new_iter)        
@@ -202,7 +206,7 @@ for step in range(steps_no):
         # --- STEP E: Update Guess for next iteration ---
         # Don't just swap them; use under-relaxation to prevent oscillations
         # f_new = f_old + omega * (f_calc - f_old)
-        relax = 0.1
+        relax = 0.4
         fl_field_current_guess = fl_previous_guess + relax * (fl_field_current_guess - fl_previous_guess)
                 
         # --- STEP D: Check Convergence ---
@@ -269,7 +273,7 @@ for step in range(steps_no):
     step_error_history.append(step_error)
     
     # Store error %
-    error = abs(energy_lost_internal - total_energy_extracted) / (total_energy_extracted + 1e-9)
+    error = abs(energy_lost_internal - total_energy_extracted) / (total_energy_extracted)
     energy_balance_history.append(error)
 
 print(*simulation.flHistory, file=fl)

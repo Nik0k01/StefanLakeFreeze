@@ -90,13 +90,13 @@ dimX, dimY = 4, 24
 X, Y = setUpMesh(dimX, dimY, l, formfunction, shape)
 initial_temp = np.ones((dimY, dimX)) * 273.15 # Initial temperature field (in Kelvin)
 initial_temp[int(dimY/2):, :] += 0.1
-x = np.linspace(230, 273, int(dimY/2))[:, None]
+x = np.linspace(220, 273, int(dimY/2))[:, None]
 initial_temp[:int(dimY/2), :] = x
 fl_field_init = np.ones((dimY, dimX))
 fl_field_init[:int(dimY/2),:] = 0.0
     
-time_step = 1  # seconds
-steps_no = 2000    # number of time steps to simulate
+time_step = 0.01  # seconds
+steps_no = 10000    # number of time steps to simulate
 
 simulation = stefan_simulation.StefanSimulation(X, Y, initial_temp, time_step, steps_no, q=[-2000, 0, 0, 0], fl_field_init=fl_field_init)
 simulation.run()

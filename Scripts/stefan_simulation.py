@@ -223,7 +223,7 @@ class StefanSimulation:
             converged = False
             iteration = 0
             max_iterations = 30 # usually converges fast
-            tolerance = 1e-6
+            tolerance = 5e-7
 
             while not converged and iteration < max_iterations:
                 
@@ -243,7 +243,8 @@ class StefanSimulation:
                 # Update Velocity Field based on current phase guess
                 self.velocity_field.velocity_field = self.velocity_field.generate_velocity_field(
                     fl_field_old,
-                    fl_field_current_guess
+                    fl_field_current_guess,
+                    self.fvm_solver.convFVM.rho
                 )
                 T_initial_conservative = self.T_field * (rho_cp_old_step / rho_cp_new_iter)       
                 # --- STEP B: Solve Temperature ---
@@ -267,7 +268,7 @@ class StefanSimulation:
                
                 # Don't just swap them; use under-relaxation to prevent oscillations
                 # f_new = f_old + omega * (f_calc - f_old)
-                relax = 0.1
+                relax = 0.4
                 fl_field_current_guess = fl_field_old + relax * (fl_field_current_guess - fl_field_old)
 
                          
@@ -454,18 +455,18 @@ if __name__ == "__main__":
     # Example usage
     Lx, Ly = 0.1, 0.1
     shape =  'rectangular'
-    dimX, dimY = 4, 24
+    dimX, dimY = 4, 48
     q = [-2000, 0, 0, 0]
     X, Y = setUpMesh(dimX, dimY, Lx, formfunction, shape)    
     initial_temp = np.ones((dimY, dimX)) * 273.15 # Initial temperature field (in Kelvin)
     initial_temp[int(dimY/2):, :] += 0.1
-    initial_temp[:int(dimY/2), :] -= 0.1
-    # x = np.linspace(230, 273, int(dimY/2))[:, None]
-    # initial_temp[:int(dimY/2), :] = x
+    # initial_temp[:int(dimY/2), :] -= 0.1
+    x = np.linspace(230, 273, int(dimY/2))[:, None]
+    initial_temp[:int(dimY/2), :] = x
     fl_field_init = np.ones((dimY, dimX))
     fl_field_init[:int(dimY/2),:] = 0.0
     time_step = 1  # seconds
-    steps_no = 5000    # number of time steps to simulate
+    steps_no = 100    # number of time steps to simulate
 
     simulation = StefanSimulation(X, Y, initial_temp, time_step, steps_no, q, fl_field_init)
     simulation.run()
