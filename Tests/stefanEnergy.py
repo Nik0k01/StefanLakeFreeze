@@ -94,18 +94,20 @@ l = 0.1
 
 # Example usage
 Lx, Ly = 0.1, 0.1
-dimX, dimY = 4, 48
+dimX, dimY = 3, 256
 X, Y = setUpMesh(dimX, dimY, l, formfunction, shape)
-initial_temp = np.ones((dimY, dimX)) * 273.15 # Initial temperature field (in Kelvin)
-initial_temp[int(dimY/2):, :] += 0.1
-x = np.linspace(230, 273, int(dimY/2))[:, None]
-initial_temp[:int(dimY/2), :] = x
+number_of_frozen_cells = int(0.01 / (Ly / dimY))  # 1 cm of ice
+initial_temp = np.ones((dimY, dimX)) * 273.15
+initial_temp[number_of_frozen_cells:, :] += 0.1
+t_ice = np.linspace(257.15, 273.15, number_of_frozen_cells)[:, None]
+initial_temp[:number_of_frozen_cells, :] = t_ice
+# initial_temp[0, :] = 253.15  # Set bottom boundary to -20C
 fl_field_init = np.ones((dimY, dimX))
-fl_field_init[:int(dimY/2),:] = 0.0
+fl_field_init[:number_of_frozen_cells,:] = 0.0
 
-time_step = 0.01    # seconds
-steps_no = 2000    # number of time steps to simulate
-q=-2000
+time_step = 10    # seconds
+steps_no = 5    # number of time steps to simulate
+q=-0
 simulation = stefan_simulation.StefanSimulation(X, Y, initial_temp, time_step, steps_no, q=[q, 0, 0, 0], fl_field_init=fl_field_init)
 simulation.update_material_properties(fl_field_init)
 simulation.velocity_field.generate_velocity_field(simulation.fl_field.flField, 
@@ -137,11 +139,6 @@ simulation.vHistory = np.ndarray((max_size, simulation.X.shape[0], simulation.X.
 simulation.timeHistory = np.ndarray((max_size))
     
 for step in range(steps_no):
-    # In your loop
-    if step < 5:
-        current_flux = -2000 * (step / 5.0)
-    else:
-        current_flux = -2000
     print(f"Time Step {step+1}/{steps_no}, Time: {simulation.current_time:.2f}s")
     
     # 1. SAVE THE PREVIOUS STATE 
@@ -157,7 +154,7 @@ for step in range(steps_no):
     
     converged = False
     iteration = 0
-    max_iterations = 30 # usually converges fast
+    max_iterations = 100 # usually converges fast
     tolerance = 1e-6
     print(f"Step {step}", file=f)
     fl_convergence_step = []  # Track convergence for this step
@@ -206,7 +203,7 @@ for step in range(steps_no):
         # --- STEP E: Update Guess for next iteration ---
         # Don't just swap them; use under-relaxation to prevent oscillations
         # f_new = f_old + omega * (f_calc - f_old)
-        relax = 0.4
+        relax = 0.75
         fl_field_current_guess = fl_previous_guess + relax * (fl_field_current_guess - fl_previous_guess)
                 
         # --- STEP D: Check Convergence ---
@@ -219,6 +216,7 @@ for step in range(steps_no):
             
         if iteration == (max_iterations - 1):
             print('Failed to converge!')
+            print(f"Max difference: {diff}")
         
         
         simulation.fvm_solver.B = 0.0 # Reset the LHS for next iteration
@@ -244,18 +242,51 @@ for step in range(steps_no):
     simulation.current_time += simulation.dt
     
     
-    # 1. Calculate Boundary Flux (Watts)
-    # Flux = k * dT/dy * Area
-    # Simple Gradient approximation for top boundary flux
-    flux_watts = q * Lx  # W/m * m = W
+    # ========================================================================
+    # ENERGY CONSERVATION WITH DIRICHLET BOUNDARY CONDITIONS
+    # ========================================================================
+    # With Dirichlet BC, temperature is fixed at the boundary.
+    # We must calculate the heat flux using Fourier's law: q = -k * dT/dy
     
+    # 1. Calculate Temperature Gradient at Bottom Boundary (y=0)
+    # Using centered difference or forward/backward difference
+    dy = Y[1, 0] - Y[0, 0]  # Grid spacing in y-direction
+    
+    # Temperature gradient at bottom boundary (dT/dy at y=0)
+    # Use forward difference: (T[1] - T[0]) / dy
+    dT_dy_bottom = (simulation.T_field[1, :] - simulation.T_field[0, :]) / dy
+    
+    # Thermal conductivity at bottom boundary
+    k_bottom = simulation.fvm_solver.diffFVM.lambda_coeff[0, :]
+    
+    # Heat flux at bottom boundary (positive = heat into domain from bottom)
+    # q = -k * dT/dy (negative gradient means heat flowing in, positive q)
+    flux_bottom = k_bottom * dT_dy_bottom  # W/m²
+    
+    # Integrate over the width to get total power (W)
+    dx = X[0, 1] - X[0, 0]  # Average grid spacing in x-direction (may vary)
+    flux_watts_bottom = np.sum(flux_bottom) * dx  # W (integrated over width)
+    
+    # # 2. Also calculate heat flux at top boundary for completeness
+    # dT_dy_top = (simulation.T_field[-1, :] - simulation.T_field[-2, :]) / dy
+    # k_top = simulation.fvm_solver.diffFVM.lambda_coeff[-1, :]
+    # flux_top = -k_top * dT_dy_top  # W/m² (positive = heat out)
+    # flux_watts_top = np.sum(flux_top) * dx  # W
+    
+    # 3. Calculate advective heat transport (enthalpy flux)
+    # This accounts for heat carried by mass moving across boundaries
     outflow_enthalpy = (simulation.velocity_field.velocity_field[-1, :, 1] * 
                         simulation.fvm_solver.convFVM.rho[-1, :] *
                         (simulation.fvm_solver.convFVM.cp[-1, :] * 
                          (simulation.T_field[-1, :] - 273.15) + 
                          simulation.fl_field.L_f) 
-                        ) * simulation.dt * Lx
-    total_energy_extracted += np.abs(flux_watts * simulation.dt) + np.abs(outflow_enthalpy.sum())
+                        ) * simulation.dt * dx
+    
+    # 4. Total energy input to system
+    # = Conductive heat at boundaries + Advective transport
+    # (flux_watts_bottom is heat IN, flux_watts_top is heat OUT)
+    net_boundary_flux = flux_watts_bottom #- flux_watts_top  # Net conductive heat input
+    total_energy_extracted += np.abs(net_boundary_flux * simulation.dt) + np.abs(outflow_enthalpy.sum())
     # 2. Calculate Current System Enthalpy
     current_total_enthalpy = np.sum(simulation.calculate_enthalpy(simulation.T_field) * simulation.velocity_field.cell_areas)
     
@@ -265,45 +296,81 @@ for step in range(steps_no):
 
     # Calculate change between Current and Previous step only
     delta_H_step = previous_total_enthalpy - current_total_enthalpy
-    flux_energy_step = np.abs(flux_watts * simulation.dt)
+    # Flux energy step = net conductive heat IN + advective heat OUT
+    flux_energy_step = np.abs(net_boundary_flux * simulation.dt) - np.abs(outflow_enthalpy.sum())
     previous_total_enthalpy = current_total_enthalpy
 
     # This error should be < 1% even at Step 10
-    step_error = abs(delta_H_step - flux_energy_step) / flux_energy_step
+    if flux_energy_step > 1e-12:  # Avoid division by zero
+        step_error = abs(delta_H_step - flux_energy_step) / abs(flux_energy_step)
+    else:
+        step_error = 0.0
     step_error_history.append(step_error)
     
     # Store error %
-    error = abs(energy_lost_internal - total_energy_extracted) / (total_energy_extracted)
+    if total_energy_extracted > 1e-12:  # Avoid division by zero
+        error = abs(energy_lost_internal - total_energy_extracted) / abs(total_energy_extracted)
+    else:
+        error = 0.0
     energy_balance_history.append(error)
 
 print(*simulation.flHistory, file=fl)
 fl.close()
 f.close()
 
-plt.figure(figsize=(6,4))
-plt.plot([step for step in range(steps_no)], energy_balance_history)
-plt.grid()
-plt.xlabel("Step")
-plt.ylabel("Relative error accumulated")
-plt.title("Field Enthalpy vs. Energy Extracted")
-plt.show()
+# ============================================================================
+# ENERGY CONSERVATION ANALYSIS SUMMARY
+# ============================================================================
+print("\n" + "="*70)
+print("ENERGY CONSERVATION ANALYSIS (Dirichlet Boundary Conditions)")
+print("="*70)
+print(f"\nDomain Setup:")
+print(f"  Width (Lx):                {Lx:.4f} m")
+print(f"  Height (Ly):               {Ly:.4f} m")
+print(f"  Total simulation time:     {simulation.current_time:.2f} s")
+print(f"  Time steps:                {steps_no}")
+print(f"  Time step size:            {time_step:.4f} s")
 
-plt.figure(figsize=(6,4))
-plt.plot([step for step in range(steps_no)], step_error_history)
-plt.grid()
-plt.xlabel("Step")
-plt.ylabel("Relative error")
-plt.title("Step error history")
-plt.show()
+print(f"\nEnergy Tracking (Dirichlet BC):")
+print(f"  Initial total enthalpy:    {initial_total_enthalpy:.2f} J")
+print(f"  Final total enthalpy:      {current_total_enthalpy:.2f} J")
+print(f"  Internal enthalpy change:  {initial_total_enthalpy - current_total_enthalpy:.2f} J")
+print(f"  Total extracted (boundary): {total_energy_extracted:.2f} J")
+print(f"  Relative error:            {energy_balance_history[-1]*100:.4f} %")
 
-# plt.figure(figsize=(10, 6))
-# # Flatten convergence history into a single line, combining all time steps
-# fl_convergence_flat = np.concatenate(fl_convergence_history)
-# plt.plot(fl_convergence_flat)
-# plt.grid()
-# plt.xlabel("Cumulative Iteration (across all time steps)")
-# plt.ylabel("Max fl field difference")
-# plt.title("FL Field Convergence")
-# plt.yscale('log')
-# plt.tight_layout()
-# plt.show()
+print(f"\nBoundary Flux Calculation (Fourier's Law: q = -k·dT/dy):")
+print(f"  Method:  Compute temperature gradient at boundaries")
+print(f"  Heat IN  (bottom): Conductive flux through bottom")
+print(f"  Heat OUT (top):    Conductive flux through top + Advective flux")
+print(f"  Net energy balance = Internal change + Boundary extraction")
+
+print("="*70 + "\n")
+
+# Plot with additional statistics
+fig, axes = plt.subplots(1, 2, figsize=(13, 5))
+
+# Cumulative error
+ax1 = axes[0]
+ax1.plot([step for step in range(steps_no)], energy_balance_history, linewidth=2, color='tab:blue')
+ax1.set_xlabel('Time Step', fontweight='bold', fontsize=11)
+ax1.set_ylabel('Relative Error (%)', fontweight='bold', fontsize=11)
+ax1.set_title('Energy Balance: Relative Error Over Time\n(Dirichlet BC)', fontweight='bold', fontsize=12)
+ax1.grid(True, alpha=0.3, linestyle='--')
+ax1.set_yscale('log')
+ax1.axhline(y=1.0, color='r', linestyle='--', alpha=0.5, label='1% error')
+ax1.legend()
+
+# Step-by-step error
+ax2 = axes[1]
+ax2.plot([step for step in range(steps_no)], step_error_history, linewidth=2, color='tab:green')
+ax2.set_xlabel('Time Step', fontweight='bold', fontsize=11)
+ax2.set_ylabel('Step Relative Error', fontweight='bold', fontsize=11)
+ax2.set_title('Step-by-Step Energy Balance\n(Dirichlet BC)', fontweight='bold', fontsize=12)
+ax2.grid(True, alpha=0.3, linestyle='--')
+ax2.set_yscale('log')
+ax2.axhline(y=0.01, color='r', linestyle='--', alpha=0.5, label='1% threshold')
+ax2.legend()
+
+plt.tight_layout()
+plt.savefig('/home/niko/Documents/Python/StefanLakeFreeze/Plots/energy_conservation_dirichlet.png', dpi=300, bbox_inches='tight')
+plt.show()

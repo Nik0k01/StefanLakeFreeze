@@ -8,6 +8,74 @@ from Scripts import stefan_simulation
 import numpy as np
 import matplotlib.pyplot as plt
 
+# ============================================================================
+# ANALYTICAL SOLUTION FUNCTIONS (Stefan Problem - Eq. 16.7)
+# ============================================================================
+
+def calculate_time_shift(z_init, k_s, rho_s, L_f, delta_T):
+    """
+    Calculate the theoretical time shift t0 for initial ice thickness.
+    
+    From Stefan problem theory:
+    t0 = (ρ_S * L_f * z_init²) / (2 * k_S * (T_S - T_K))
+    
+    Parameters:
+    -----------
+    z_init : float
+        Initial ice thickness (m)
+    k_s : float
+        Thermal conductivity of ice (W/m·K)
+    rho_s : float
+        Density of ice (kg/m³)
+    L_f : float
+        Latent heat of fusion (J/kg)
+    delta_T : float
+        Temperature difference T_S - T_K (K)
+        
+    Returns:
+    --------
+    float
+        Time shift t0 (s)
+    """
+    if delta_T == 0:
+        return 0.0
+    t0 = (rho_s * L_f * z_init**2) / (2 * k_s * delta_T)
+    return t0
+
+def analytical_solution(t, k_s, rho_s, L_f, delta_T, t0=0.0):
+    """
+    Compute the analytical solution for ice-water interface position.
+    
+    From Equation (16.7) in Stefan Problem:
+    z_analytical(t) = sqrt(2 * k_S * (T_S - T_K) / (ρ_S * L_f) * (t + t0))
+    
+    Parameters:
+    -----------
+    t : float or array
+        Time (s)
+    k_s : float
+        Thermal conductivity of ice (W/m·K)
+    rho_s : float
+        Density of ice (kg/m³)
+    L_f : float
+        Latent heat of fusion (J/kg)
+    delta_T : float
+        Temperature difference T_S - T_K (K)
+    t0 : float, optional
+        Time shift for initial ice thickness (s). Default: 0.0
+        
+    Returns:
+    --------
+    float or array
+        Interface position (m)
+    """
+    if delta_T <= 0:
+        raise ValueError("Temperature difference must be positive")
+    
+    coefficient = 2 * k_s * delta_T / (rho_s * L_f)
+    z_analytical = np.sqrt(coefficient * (t + t0))
+    return z_analytical
+
 def formfunction(x, shape):
     """
     Defines the shape of north boundary
@@ -164,7 +232,7 @@ class InterfaceTracker(stefan_simulation.StefanSimulation):
             
             converged = False
             iteration = 0
-            max_iterations = 30
+            max_iterations = 100
             tolerance = 1e-6
 
             while not converged and iteration < max_iterations:
@@ -200,7 +268,7 @@ class InterfaceTracker(stefan_simulation.StefanSimulation):
                 fl_field_current_guess = self.fl_correction(T_new, fl_previous_guess)
                 
                 # Under-relaxation to prevent oscillations
-                relax = 0.4
+                relax = 0.75
                 fl_field_current_guess = fl_field_old + relax * (fl_field_current_guess - fl_field_old)
                 
                 # Check convergence
@@ -243,13 +311,13 @@ l = 0.1
 Lx, Ly = 0.1, 0.1
 dimX, dimY = 3, 256
 X, Y = setUpMesh(dimX, dimY, l, formfunction, shape)
+number_of_frozen_cells = int(0.005 / (Ly / dimY))  # 1 cm of ice
 
 initial_temp = np.ones((dimY, dimX)) * 273.15
-initial_temp[int(dimY/2):, :] += 0.1
-x = np.linspace(170, 273, int(dimY/2))[:, None]
-initial_temp[:int(dimY/2), :] = x
+initial_temp[number_of_frozen_cells:, :] += 0.1
+initial_temp[:number_of_frozen_cells, :] -= 1
 fl_field_init = np.ones((dimY, dimX))
-fl_field_init[:int(dimY/2),:] = 0.0
+fl_field_init[:number_of_frozen_cells,:] = 0.0
 
 time_step = 10.  # seconds
 steps_no = 100   # number of time steps to simulate
@@ -266,11 +334,11 @@ L_f = 334000.0       # Latent heat of fusion (J/kg)
 
 # Determine cold boundary temperature
 # T_K is the minimum temperature in the initial temperature field
-T_K = initial_temp.min()
+T_K = 257.15
 delta_T = T_S - T_K  # Temperature difference
 
 # Calculate Phase Number
-Ph = c_E * delta_T / L_f
+Ph = L_f / (c_E * delta_T)  
 
 print("\n" + "="*70)
 print("PHASE NUMBER ANALYSIS (Stefan Problem - Eq. 16.8)")
@@ -283,7 +351,7 @@ print(f"\nTemperature Conditions:")
 print(f"  T_S (Melting point):         {T_S:.2f} K")
 print(f"  T_K (Cold boundary):         {T_K:.2f} K")
 print(f"  ΔT = T_S - T_K:              {delta_T:.2f} K")
-print(f"\n  → Ph = {c_E:.0f} × {delta_T:.2f} / {L_f:.0f} = {Ph:.6f}")
+print(f"\n  → Ph = {L_f:.0f} / ({c_E:.0f} × {delta_T:.2f})  = {Ph:.6f}")
 print(f"\nPhysical Regime:")
 if Ph > 10:
     print(f"  ✓ HIGH Ph ({Ph:.4f} >> 1)")
@@ -306,12 +374,12 @@ print("="*70 + "\n")
 # Create tracker with center x index
 center_x_idx = dimX // 2
 tracker = InterfaceTracker(X, Y, initial_temp, time_step, steps_no, 
-                           q=[-5000, 0, 0, 0], fl_field_init=fl_field_init,
+                           q=[0, 0, 0, 0], fl_field_init=fl_field_init,
                            center_x_idx=center_x_idx)
 tracker.run()
 
 # ============================================================================
-# PLOTTING: Interface Position Tracking
+# PLOTTING: Interface Position Tracking with Analytical Solution
 # ============================================================================
 
 # Convert to numpy arrays for plotting
@@ -330,26 +398,75 @@ print(f"Number of tracked positions: {len(interface_valid)}")
 print(f"Interface position range: {interface_valid.min():.6f} to {interface_valid.max():.6f} m")
 print(f"Time range: {times_valid.min():.2f} to {times_valid.max():.2f} s")
 
-# Plot 1: Interface Position vs Time
-fig, ax = plt.subplots(figsize=(10, 6))
-ax.plot(times_valid, interface_valid, 'o-', linewidth=2, markersize=6, 
-        label='Interface Position', color='tab:blue')
+# ============================================================================
+# COMPUTE ANALYTICAL SOLUTION
+# ============================================================================
+
+# Physical parameters for analytical solution
+k_S = 2.22              # Thermal conductivity of ice (W/m·K)
+rho_S = 917             # Density of ice (kg/m³)
+L_f = 334000.0          # Latent heat of fusion (J/kg)
+T_S = 273.15            # Melting point (K)
+T_K = 257.15            # Cold boundary temperature (K)
+delta_T = T_S - T_K     # Temperature difference (K)
+
+# Calculate initial ice thickness from the domain setup
+z_init = number_of_frozen_cells * (Ly / dimY)  # in meters
+
+# Calculate time shift for initial ice thickness
+t0 = calculate_time_shift(z_init, k_S, rho_S, L_f, delta_T)
+
+print(f"\n" + "="*70)
+print("ANALYTICAL SOLUTION PARAMETERS (Eq. 16.7)")
+print("="*70)
+print(f"Physical Properties:")
+print(f"  k_S (Thermal conductivity):  {k_S:.2f} W/m·K")
+print(f"  ρ_S (Ice density):           {rho_S:.0f} kg/m³")
+print(f"  L_f (Latent heat fusion):    {L_f:.0f} J/kg")
+print(f"\nTemperature Conditions:")
+print(f"  T_S (Melting point):         {T_S:.2f} K")
+print(f"  T_K (Cold boundary):         {T_K:.2f} K")
+print(f"  ΔT = T_S - T_K:              {delta_T:.2f} K")
+print(f"\nInitial Ice Layer:")
+print(f"  z_init (initial thickness):  {z_init*1000:.2f} mm")
+print(f"  t0 (time shift):             {t0:.4f} s")
+print(f"\nAnalytical Formula:")
+print(f"  z(t) = √(2·k_S·ΔT/(ρ_S·L_f)·(t + t0))")
+print(f"  z(t) = √({2*k_S*delta_T/(rho_S*L_f):.6f}·(t + {t0:.4f}))")
+print("="*70 + "\n")
+
+# Generate analytical solution for comparison
+t_analytical = np.linspace(times_valid.min(), times_valid.max(), 200)
+z_analytical = analytical_solution(t_analytical, k_S, rho_S, L_f, delta_T, t0)
+
+# Plot 1: Interface Position vs Time (with analytical solution)
+fig, ax = plt.subplots(figsize=(11, 7))
+ax.plot(times_valid, interface_valid, 'o-', linewidth=2, markersize=7, 
+        label='Numerical Solution', color='tab:blue', alpha=0.8)
+ax.plot(t_analytical, z_analytical, '--', linewidth=2.5,
+        label=f'Analytical Solution (t₀={t0:.4f}s)', color='tab:red', alpha=0.8)
 ax.set_xlabel('Time (s)', fontweight='bold', fontsize=12)
 ax.set_ylabel('Interface Position (m)', fontweight='bold', fontsize=12)
-ax.set_title('Ice-Water Interface Position vs Time', fontweight='bold', fontsize=13)
+ax.set_title('Ice-Water Interface Position vs Time\n(Numerical vs Analytical Solution)', 
+             fontweight='bold', fontsize=13)
 ax.grid(True, alpha=0.3, linestyle='--')
 ax.legend(loc='best', fontsize=11)
 plt.tight_layout()
 plt.savefig('/home/niko/Documents/Python/StefanLakeFreeze/Plots/interface_vs_time.png', dpi=300, bbox_inches='tight')
 plt.show()
 
-# Plot 2: Interface Position vs sqrt(Time)
-fig, ax = plt.subplots(figsize=(10, 6))
-ax.plot(sqrt_times_valid, interface_valid, 's-', linewidth=2, markersize=6,
-        label='Interface Position', color='tab:green')
-ax.set_xlabel('√Time (√s)', fontweight='bold', fontsize=12)
+# Plot 2: Interface Position vs sqrt(Time) (with analytical solution)
+fig, ax = plt.subplots(figsize=(11, 7))
+sqrt_t_analytical = np.sqrt(t_analytical + t0)
+z_analytical_sqrt = analytical_solution(t_analytical, k_S, rho_S, L_f, delta_T, t0)
+
+ax.plot(np.sqrt(times_valid + t0), interface_valid, 'o-', linewidth=2, markersize=7,
+        label='Numerical Solution', color='tab:blue', alpha=0.8)
+ax.plot(sqrt_t_analytical, z_analytical_sqrt, '--', linewidth=2.5,
+        label='Analytical Solution', color='tab:red', alpha=0.8)
+ax.set_xlabel('√(Time + t₀) (√s)', fontweight='bold', fontsize=12)
 ax.set_ylabel('Interface Position (m)', fontweight='bold', fontsize=12)
-ax.set_title('Ice-Water Interface Position vs √Time (Analytical Solution Validation)', 
+ax.set_title('Ice-Water Interface Position vs √Time\n(Validates Stefan Solution: z ∝ √(t + t₀))', 
              fontweight='bold', fontsize=13)
 ax.grid(True, alpha=0.3, linestyle='--')
 ax.legend(loc='best', fontsize=11)
@@ -357,24 +474,28 @@ plt.tight_layout()
 plt.savefig('/home/niko/Documents/Python/StefanLakeFreeze/Plots/interface_vs_sqrt_time.png', dpi=300, bbox_inches='tight')
 plt.show()
 
-# Plot 3: Comparison plot - both on same figure
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
+# Plot 3: Comparison plot - both on same figure (with analytical)
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
 
 # Left plot: vs Time
 ax1.plot(times_valid, interface_valid, 'o-', linewidth=2, markersize=6,
-         label='Interface Position', color='tab:blue')
+         label='Numerical Solution', color='tab:blue', alpha=0.8)
+ax1.plot(t_analytical, z_analytical, '--', linewidth=2.5,
+         label='Analytical Solution', color='tab:red', alpha=0.8)
 ax1.set_xlabel('Time (s)', fontweight='bold', fontsize=11)
 ax1.set_ylabel('Interface Position (m)', fontweight='bold', fontsize=11)
 ax1.set_title('vs Time', fontweight='bold', fontsize=12)
 ax1.grid(True, alpha=0.3, linestyle='--')
 ax1.legend(loc='best', fontsize=10)
 
-# Right plot: vs sqrt(Time)
-ax2.plot(sqrt_times_valid, interface_valid, 's-', linewidth=2, markersize=6,
-         label='Interface Position', color='tab:green')
-ax2.set_xlabel('√Time (√s)', fontweight='bold', fontsize=11)
+# Right plot: vs sqrt(Time + t0)
+ax2.plot(np.sqrt(times_valid + t0), interface_valid, 'o-', linewidth=2, markersize=6,
+         label='Numerical Solution', color='tab:blue', alpha=0.8)
+ax2.plot(sqrt_t_analytical, z_analytical_sqrt, '--', linewidth=2.5,
+         label='Analytical Solution', color='tab:red', alpha=0.8)
+ax2.set_xlabel('√(Time + t₀) (√s)', fontweight='bold', fontsize=11)
 ax2.set_ylabel('Interface Position (m)', fontweight='bold', fontsize=11)
-ax2.set_title('vs √Time (Stefan Solution)', fontweight='bold', fontsize=12)
+ax2.set_title('vs √(Time + t₀) (Stefan Solution)', fontweight='bold', fontsize=12)
 ax2.grid(True, alpha=0.3, linestyle='--')
 ax2.legend(loc='best', fontsize=10)
 
@@ -382,38 +503,86 @@ plt.tight_layout()
 plt.savefig('/home/niko/Documents/Python/StefanLakeFreeze/Plots/interface_comparison.png', dpi=300, bbox_inches='tight')
 plt.show()
 
-# Plot 4: Check for linearity with sqrt(t)
-fig, ax = plt.subplots(figsize=(10, 6))
-ax.plot(sqrt_times_valid, interface_valid, 'o', markersize=8, 
-        label='Numerical Solution', color='tab:blue', alpha=0.7)
+# Plot 4: Check for linearity with sqrt(t) - with analytical overlay
+fig, ax = plt.subplots(figsize=(11, 7))
+ax.plot(np.sqrt(times_valid + t0), interface_valid, 'o', markersize=8, 
+        label='Numerical Solution', color='tab:blue', alpha=0.8)
+
+# Analytical solution
+ax.plot(sqrt_t_analytical, z_analytical_sqrt, '--', linewidth=2.5,
+        label='Analytical Solution (Eq. 16.7)', color='tab:red', alpha=0.8)
 
 # Fit a line through the data to verify Stefan solution
-coeffs = np.polyfit(sqrt_times_valid, interface_valid, 1)
+coeffs = np.polyfit(np.sqrt(times_valid + t0), interface_valid, 1)
 fit_line = np.poly1d(coeffs)
-ax.plot(sqrt_times_valid, fit_line(sqrt_times_valid), '--', linewidth=2,
-        label=f'Linear Fit: z = {coeffs[0]:.6f}√t + {coeffs[1]:.6f}', color='tab:red')
+ax.plot(np.sqrt(times_valid + t0), fit_line(np.sqrt(times_valid + t0)), ':', linewidth=2.5,
+        label=f'Linear Fit: z = {coeffs[0]:.6f}√(t+t₀) + {coeffs[1]:.6f}', 
+        color='tab:green', alpha=0.8)
 
-ax.set_xlabel('√Time (√s)', fontweight='bold', fontsize=12)
+ax.set_xlabel('√(Time + t₀) (√s)', fontweight='bold', fontsize=12)
 ax.set_ylabel('Interface Position (m)', fontweight='bold', fontsize=12)
-ax.set_title('Interface Position vs √Time with Linear Fit\n(Validates Eq. 16.7: $z_K(t) \\propto \\sqrt{t}$)',
+ax.set_title('Interface Position vs √(Time + t₀) with Linear Fit\n(Validates Eq. 16.7: $z_K(t) = \\sqrt{\\frac{2k_S\\Delta T}{\\rho_S L_f}(t + t_0)}$)',
              fontweight='bold', fontsize=13)
 ax.grid(True, alpha=0.3, linestyle='--')
-ax.legend(loc='best', fontsize=11)
+ax.legend(loc='best', fontsize=10)
 
 # Add R² value
 from scipy.stats import linregress
-slope, intercept, r_value, p_value, std_err = linregress(sqrt_times_valid, interface_valid)
-ax.text(0.05, 0.95, f'$R^2$ = {r_value**2:.6f}', transform=ax.transAxes,
-        fontsize=11, verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+slope, intercept, r_value, p_value, std_err = linregress(np.sqrt(times_valid + t0), interface_valid)
+ax.text(0.05, 0.95, f'Numerical fit: $R^2$ = {r_value**2:.6f}', transform=ax.transAxes,
+        fontsize=10, verticalalignment='top', 
+        bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.7))
 
 plt.tight_layout()
 plt.savefig('/home/niko/Documents/Python/StefanLakeFreeze/Plots/interface_linear_fit.png', dpi=300, bbox_inches='tight')
 plt.show()
 
-print(f"\nLinear Fit Results:")
+# ============================================================================
+# ERROR ANALYSIS: Numerical vs Analytical
+# ============================================================================
+
+print(f"\nLinear Fit Results (Numerical Solution):")
 print(f"Slope (Stefan coefficient): {coeffs[0]:.6f} m/√s")
 print(f"Intercept: {coeffs[1]:.6f} m")
 print(f"R² value: {r_value**2:.6f}")
+
+# Interpolate analytical solution at numerical solution time points for error analysis
+z_analytical_at_t = analytical_solution(times_valid, k_S, rho_S, L_f, delta_T, t0)
+
+# Calculate errors
+absolute_error = interface_valid - z_analytical_at_t
+relative_error = absolute_error / z_analytical_at_t * 100
+
+print(f"\nError Analysis (Numerical vs Analytical):")
+print(f"Mean Absolute Error:    {np.mean(np.abs(absolute_error))*1000:.6f} mm")
+print(f"Max Absolute Error:     {np.max(np.abs(absolute_error))*1000:.6f} mm")
+print(f"Mean Relative Error:    {np.mean(np.abs(relative_error)):.4f} %")
+print(f"Max Relative Error:     {np.max(np.abs(relative_error)):.4f} %")
+
+# Plot 5: Error analysis
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
+
+# Left: Absolute error vs time
+ax1.plot(times_valid, absolute_error*1000, 'o-', linewidth=2, markersize=6,
+         color='tab:purple', alpha=0.8)
+ax1.axhline(y=0, color='k', linestyle='--', linewidth=1, alpha=0.5)
+ax1.set_xlabel('Time (s)', fontweight='bold', fontsize=11)
+ax1.set_ylabel('Absolute Error (mm)', fontweight='bold', fontsize=11)
+ax1.set_title('Absolute Error: Numerical - Analytical', fontweight='bold', fontsize=12)
+ax1.grid(True, alpha=0.3, linestyle='--')
+
+# Right: Relative error vs time
+ax2.plot(times_valid, relative_error, 'o-', linewidth=2, markersize=6,
+         color='tab:orange', alpha=0.8)
+ax2.axhline(y=0, color='k', linestyle='--', linewidth=1, alpha=0.5)
+ax2.set_xlabel('Time (s)', fontweight='bold', fontsize=11)
+ax2.set_ylabel('Relative Error (%)', fontweight='bold', fontsize=11)
+ax2.set_title('Relative Error: (Numerical - Analytical) / Analytical', fontweight='bold', fontsize=12)
+ax2.grid(True, alpha=0.3, linestyle='--')
+
+plt.tight_layout()
+plt.savefig('/home/niko/Documents/Python/StefanLakeFreeze/Plots/error_analysis.png', dpi=300, bbox_inches='tight')
+plt.show()
 
 # ============================================================================
 # OPTIONAL: Low Phase Number Case for Comparison

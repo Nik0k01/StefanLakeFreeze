@@ -102,9 +102,9 @@ class StefanSimulation:
         self.enthalpy_field = self.calculate_enthalpy(self.T_field)
         self.velocity_field = velocityField(X, Y, dt=self.dt)
         
-        self.boundary = ['N', 'N', 'N', 'N']
+        self.boundary = ['D', 'N', 'N', 'N']
         self.fvm_solver = FVMSolver(X, Y, boundary=self.boundary, 
-                                     TD=[0, 0, 0, 0], q=q, alpha=1.0, 
+                                     TD=[257.15, 0, 0, 0], q=q, alpha=1.0, 
                                      Tinf=273.15, conductivity=np.ones(X.shape)*0.560,
                                      velocity_field=self.velocity_field.velocity_field,
                                      rho_field=np.ones(X.shape)*1000,

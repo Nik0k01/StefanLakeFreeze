@@ -1,5 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.sparse import csc_array
+from scipy.sparse.linalg import spsolve
 
 class Coordinate2D():
     def __init__(self, x, y):
@@ -1867,8 +1869,10 @@ class FVMSolver:
         T_history[0, :, :] = T_initial.reshape(self.m, self.n)
         # Time-stepping loop
         for step in range(1, steps + 1):
+            implicit_A = csc_array(implicit_A)
+            implicit_B = csc_array(implicit_B.reshape(-1, 1))
             # Implicit backward Euler
-            T_new = np.linalg.solve(implicit_A, implicit_B)
+            T_new = spsolve(implicit_A, implicit_B)
             # Save previous value for next iteration
             T_initial = T_new
             # Update B matrix

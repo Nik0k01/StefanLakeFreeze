@@ -89,16 +89,20 @@ Lx, Ly = 0.1, 0.1
 dimX, dimY = 3, 256
 X, Y = setUpMesh(dimX, dimY, l, formfunction, shape)
 initial_temp = np.ones((dimY, dimX)) * 273.15 # Initial temperature field (in Kelvin)
-initial_temp[int(dimY/2):, :] += 0.1
-x = np.linspace(170, 273, int(dimY/2))[:, None]
-initial_temp[:int(dimY/2), :] = x
+number_of_frozen_cells = int(0.01 / (Ly / dimY))  # 1 cm of ice
+
+initial_temp = np.ones((dimY, dimX)) * 273.15
+initial_temp[number_of_frozen_cells:, :] += 0.1
+initial_temp[:number_of_frozen_cells, :] -= 1
+initial_temp[0, :] = 257.15  # Set bottom boundary to -20C
 fl_field_init = np.ones((dimY, dimX))
-fl_field_init[:int(dimY/2),:] = 0.0
+fl_field_init[:number_of_frozen_cells,:] = 0.0
+
     
 time_step = 10.  # seconds
 steps_no = 100    # number of time steps to simulate
 
-simulation = stefan_simulation.StefanSimulation(X, Y, initial_temp, time_step, steps_no, q=[-5000, 0, 0, 0], fl_field_init=fl_field_init)
+simulation = stefan_simulation.StefanSimulation(X, Y, initial_temp, time_step, steps_no, q=[0, 0, 0, 0], fl_field_init=fl_field_init)
 simulation.run()
 
 fig, ax1 = plt.subplots(figsize=(6, 4))
