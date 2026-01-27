@@ -222,8 +222,8 @@ class StefanSimulation:
             
             converged = False
             iteration = 0
-            max_iterations = 30 # usually converges fast
-            tolerance = 5e-7
+            max_iterations = 100 # usually converges fast
+            tolerance = 1e-6
 
             while not converged and iteration < max_iterations:
                 
@@ -268,7 +268,7 @@ class StefanSimulation:
                
                 # Don't just swap them; use under-relaxation to prevent oscillations
                 # f_new = f_old + omega * (f_calc - f_old)
-                relax = 0.4
+                relax = 0.5
                 fl_field_current_guess = fl_field_old + relax * (fl_field_current_guess - fl_field_old)
 
                          
@@ -455,17 +455,18 @@ if __name__ == "__main__":
     # Example usage
     Lx, Ly = 0.1, 0.1
     shape =  'rectangular'
-    dimX, dimY = 4, 48
-    q = [-2000, 0, 0, 0]
+    dimX, dimY = 3, 256
+    q = [0, 0, 0, 0]
     X, Y = setUpMesh(dimX, dimY, Lx, formfunction, shape)    
     initial_temp = np.ones((dimY, dimX)) * 273.15 # Initial temperature field (in Kelvin)
-    initial_temp[int(dimY/2):, :] += 0.1
-    # initial_temp[:int(dimY/2), :] -= 0.1
-    x = np.linspace(230, 273, int(dimY/2))[:, None]
-    initial_temp[:int(dimY/2), :] = x
+    number_of_frozen_cells = int(0.01 / (Ly / dimY))  # 1 cm of ice
+    initial_temp = np.ones((dimY, dimX)) * 273.15
+    initial_temp[number_of_frozen_cells:, :] += 0.1
+    initial_temp[:number_of_frozen_cells, :] -= 1
+    initial_temp[0, :] = 257.15  # Set bottom boundary to -20C
     fl_field_init = np.ones((dimY, dimX))
-    fl_field_init[:int(dimY/2),:] = 0.0
-    time_step = 1  # seconds
+    fl_field_init[:number_of_frozen_cells,:] = 0.0
+    time_step = 10  # seconds
     steps_no = 100    # number of time steps to simulate
 
     simulation = StefanSimulation(X, Y, initial_temp, time_step, steps_no, q, fl_field_init)
