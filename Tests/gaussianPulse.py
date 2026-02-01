@@ -57,7 +57,7 @@ Tinf = 90
 q = 0
 fvm_solver = FVMSolver(mesh[0], mesh[1], boundary, TD, q, alpha, Tinf, k, u, rho, cp)
 # Solve the convection-diffusion equation
-T_numerical = fvm_solver.unsteady_solve(T_initial=T_initial, t_end=0.5, dt=0.01, source_type=None)
+T_numerical = fvm_solver.unsteady_solve(T_initial=T_initial, t_end=0.5, dt=0.01, boundries=boundary)
 # Get the last time step
 T_numerical = T_numerical[-1, :, :]
 

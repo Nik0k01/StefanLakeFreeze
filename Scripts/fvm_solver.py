@@ -1,5 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.sparse import csc_array
+from scipy.sparse.linalg import spsolve
 
 class Coordinate2D():
     def __init__(self, x, y):
@@ -1226,7 +1228,7 @@ class ConvectiveFVM(DiffFVM):
         # If F_N < 0 (Inflow), we are bringing in enthalpy from outside.
         # We need the temperature of that incoming fluid (T_inf or T_boundary).
         if F_S < 0:
-            T_inlet = self.TD[0] # Assuming boundary temp is stored here
+            T_inlet = self.TD[1] # Assuming boundary temp is stored here
             b += (-F_S * T_inlet) / S_nn
             
         stencil[self.index(i, j)] = D0
@@ -1303,7 +1305,7 @@ class ConvectiveFVM(DiffFVM):
         # If F_E < 0 (Inflow), we are bringing in enthalpy from outside.
         # We need the temperature of that incoming fluid (T_inf or T_boundary).
         if F_E < 0:
-            T_inlet = self.TD[0] # Assuming boundary temp is stored here
+            T_inlet = self.TD[3] # Assuming boundary temp is stored here
             b += (-F_E * T_inlet) / S_ee
         
         # Center (P)
@@ -1386,7 +1388,7 @@ class ConvectiveFVM(DiffFVM):
         # If F_W < 0 (Inflow), we are bringing in enthalpy from outside.
         # We need the temperature of that incoming fluid (T_inf or T_boundary).
         if F_W < 0:
-            T_inlet = self.TD[0] # Assuming boundary temp is stored here
+            T_inlet = self.TD[2] # Assuming boundary temp is stored here
             b += (-F_W * T_inlet) / S_ww
         
         # Center (P)
@@ -1595,8 +1597,7 @@ class ConvectiveFVM(DiffFVM):
         ne = Coordinate2D((Ne.x + e.x)/2, (Ne.y + e.y)/2)
 
         # Calculate Area
-        # Loop CCW: P -> e -> ne -> n
-        S_sw = abs(self.calculate_area(P, e, ne, n))
+        S_sw = (self.calculate_area(n, ne, e, P))
         
         # Get properties
         rho = self.rho[i, j]
@@ -1684,8 +1685,7 @@ class ConvectiveFVM(DiffFVM):
         nw = Coordinate2D((Nw.x + w.x)/2, (Nw.y + w.y)/2)
 
         # Calculate Area
-        # Loop CCW: P -> n -> nw -> w
-        S_se = abs(self.calculate_area(P, n, nw, w))
+        S_se = (self.calculate_area(P, w, nw, n))
         
         # Get properties
         rho = self.rho[i, j]
@@ -1816,15 +1816,39 @@ class FVMSolver:
     def solve(self):
         for i in range(self.m):
             for j in range(self.n):
-                # Set stencil for the node
                 k = self.diffFVM.index(i, j)
+                
+                # Check if this node is a Dirichlet Boundary
+                is_dirichlet = False
+                
+                # North Boundary (i=0)
+                if i == 0 and 'D' in self.diffFVM.boundary[0]: 
+                    is_dirichlet = True
+                # South Boundary (i=m-1)
+                elif i == self.m - 1 and 'D' in self.diffFVM.boundary[1]:
+                    is_dirichlet = True
+                # West Boundary (j=0)
+                elif j == 0 and 'D' in self.diffFVM.boundary[2]:
+                    is_dirichlet = True
+                # East Boundary (j=n-1)
+                elif j == self.n - 1 and 'D' in self.diffFVM.boundary[3]:
+                    is_dirichlet = True
+                
+                # Fetch Stencils
                 a_diff, b_diff = self.diffFVM.set_stencil(i, j)
                 a_conv, b_conv = self.convFVM.set_stencil(i, j)
-                self.A[k, :] = a_diff + a_conv
-                self.B[k] = b_diff + b_conv
+
+                if is_dirichlet:
+                    # IGNORE Convection. The Diffusion part already sets T = T_wall
+                    self.A[k, :] = a_diff 
+                    self.B[k] = b_diff
+                else:
+                    # For Inner nodes or Flux boundaries, ADD them
+                    self.A[k, :] = a_diff + a_conv
+                    self.B[k] = b_diff + b_conv
+                    
         T = np.linalg.solve(self.A, self.B)        
-        dimY, dimX = self.m, self.n
-        return T.reshape(dimY, dimX)
+        return T.reshape(self.m, self.n)
     
     def implicit_scheme(self, T_initial, t_end, dt):
         implicit_A = np.eye(self.m * self.n) - dt * self.A
@@ -1845,8 +1869,10 @@ class FVMSolver:
         T_history[0, :, :] = T_initial.reshape(self.m, self.n)
         # Time-stepping loop
         for step in range(1, steps + 1):
+            implicit_A = csc_array(implicit_A)
+            implicit_B = csc_array(implicit_B.reshape(-1, 1))
             # Implicit backward Euler
-            T_new = np.linalg.solve(implicit_A, implicit_B)
+            T_new = spsolve(implicit_A, implicit_B)
             # Save previous value for next iteration
             T_initial = T_new
             # Update B matrix
@@ -1869,10 +1895,35 @@ class FVMSolver:
             for j in range(self.n):
                 # Set stencil for the node
                 k = self.diffFVM.index(i, j)
+                # Check if this node is a Dirichlet Boundary
+                is_dirichlet = False
+                
+                # North Boundary (i=0)
+                if i == 0 and 'D' in self.diffFVM.boundary[0]: 
+                    is_dirichlet = True
+                # South Boundary (i=m-1)
+                elif i == self.m - 1 and 'D' in self.diffFVM.boundary[1]:
+                    is_dirichlet = True
+                # West Boundary (j=0)
+                elif j == 0 and 'D' in self.diffFVM.boundary[2]:
+                    is_dirichlet = True
+                # East Boundary (j=n-1)
+                elif j == self.n - 1 and 'D' in self.diffFVM.boundary[3]:
+                    is_dirichlet = True
+                
+                # Fetch Stencils
                 a_diff, b_diff = self.diffFVM.set_stencil(i, j)
                 a_conv, b_conv = self.convFVM.set_stencil(i, j)
-                self.A[k, :] = a_diff + a_conv
-                self.B[k] += b_diff + b_conv
+
+                if is_dirichlet:
+                    # IGNORE Convection. The Diffusion part already sets T = T_wall
+                    self.A[k, :] = a_diff 
+                    self.B[k] += b_diff
+                else:
+                    # For Inner nodes or Flux boundaries, ADD them
+                    self.A[k, :] = a_diff + a_conv
+                    self.B[k] += b_diff + b_conv
+                
         # Solve using implicit scheme
         self.normalize_matrix(boundries, self.convFVM.rho, self.convFVM.cp)
         T_history = self.implicit_scheme(T_initial, t_end, dt)

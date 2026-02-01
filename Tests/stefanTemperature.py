@@ -86,20 +86,29 @@ l = 0.1
 
 # Example usage
 Lx, Ly = 0.1, 0.1
-dimX, dimY = 3, 3
+dimX, dimY = 3, 256
 X, Y = setUpMesh(dimX, dimY, l, formfunction, shape)
-initial_temp = np.ones((dimY, dimX)) * 273.15 + 0.1  # Initial temperature field (in Kelvin)
+initial_temp = np.ones((dimY, dimX)) * 273.15 # Initial temperature field (in Kelvin)
+number_of_frozen_cells = int(0.01 / (Ly / dimY))  # 1 cm of ice
 
-time_step = 2  # seconds
-steps_no = 200    # number of time steps to simulate
+initial_temp = np.ones((dimY, dimX)) * 273.15
+initial_temp[number_of_frozen_cells:, :] += 0.1
+initial_temp[:number_of_frozen_cells, :] -= 1
+initial_temp[0, :] = 257.15  # Set bottom boundary to -20C
+fl_field_init = np.ones((dimY, dimX))
+fl_field_init[:number_of_frozen_cells,:] = 0.0
 
-simulation = stefan_simulation.StefanSimulation(X, Y, initial_temp, time_step, steps_no, q=[-2000, 0, 0, 0])
+    
+time_step = 10.  # seconds
+steps_no = 100    # number of time steps to simulate
+
+simulation = stefan_simulation.StefanSimulation(X, Y, initial_temp, time_step, steps_no, q=[0, 0, 0, 0], fl_field_init=fl_field_init)
 simulation.run()
 
 fig, ax1 = plt.subplots(figsize=(6, 4))
 
 # Primary axis for temperature
-ax1.plot(simulation.timeHistory, simulation.THistory[:, 0, 1], label='Center Point Temperature', color='tab:blue')
+ax1.plot(simulation.timeHistory, simulation.THistory[:, int(dimY/2+1), 1], label='Center Point Temperature', color='tab:blue')
 ax1.set_xlabel('time (s)')
 ax1.set_ylabel('Temperature (K)', color='tab:blue')
 ax1.tick_params(axis='y', labelcolor='tab:blue')
@@ -107,7 +116,7 @@ ax1.grid()
 
 # Secondary axis for liquid fraction
 ax2 = ax1.twinx()
-ax2.plot(simulation.timeHistory, simulation.flHistory[:, 0, 1], label='Center Point Liquid Fraction', color='tab:orange')
+ax2.plot(simulation.timeHistory, simulation.flHistory[:, int(dimY/2+1), 1], label='Center Point Liquid Fraction', color='tab:orange')
 ax2.set_ylabel('Liquid Fraction', color='tab:orange')
 ax2.tick_params(axis='y', labelcolor='tab:orange')
 
@@ -117,3 +126,58 @@ lines2, labels2 = ax2.get_legend_handles_labels()
 ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper right')
 
 plt.show()
+
+# Temperature domain plot - Temperature vs Depth for 10 different time steps
+fig, ax = plt.subplots(figsize=(10, 6))
+
+# Select 10 evenly spaced time steps
+num_steps = len(simulation.timeHistory)
+step_indices = np.linspace(0, num_steps - 1, 10, dtype=int)
+
+# Get depth values (Y coordinates at center point, x index = 1)
+center_x_idx = 1
+depths = Y[:, center_x_idx]
+
+# Plot temperature profile for each time step
+colors = plt.cm.viridis(np.linspace(0, 1, 10))
+
+for idx, (step_idx, color) in enumerate(zip(step_indices, colors)):
+    # Extract temperature field at this time step and center x location
+    T_profile = simulation.THistory[step_idx, :, center_x_idx]
+    time_value = simulation.timeHistory[step_idx]
+    
+    ax.plot(depths, T_profile, label=f't={time_value:.1f}s', 
+            color=color, linewidth=2, marker='o', markersize=4, alpha=0.8)
+
+ax.set_xlabel('Depth (m)', fontweight='bold', fontsize=12)
+ax.set_ylabel('Temperature (K)', fontweight='bold', fontsize=12)
+ax.set_title('Temperature Profile vs Depth at Different Time Steps', fontweight='bold', fontsize=13)
+ax.grid(True, alpha=0.3, linestyle='--')
+ax.legend(loc='best', fontsize=10, framealpha=0.9)
+plt.tight_layout()
+plt.show()
+
+print(T_profile)
+# Liquid Fraction domain plot - Liquid Fraction vs Depth for 10 different time steps
+fig, ax = plt.subplots(figsize=(10, 6))
+
+# Use same 10 evenly spaced time steps
+colors = plt.cm.viridis(np.linspace(0, 1, 10))
+
+for idx, (step_idx, color) in enumerate(zip(step_indices, colors)):
+    # Extract liquid fraction field at this time step and center x location
+    fl_profile = simulation.flHistory[step_idx, :, center_x_idx]
+    time_value = simulation.timeHistory[step_idx]
+    
+    ax.plot(depths, fl_profile, label=f't={time_value:.1f}s', 
+            color=color, linewidth=2, marker='s', markersize=4, alpha=0.8)
+
+ax.set_xlabel('Depth (m)', fontweight='bold', fontsize=12)
+ax.set_ylabel('Liquid Fraction', fontweight='bold', fontsize=12)
+ax.set_title('Liquid Fraction Profile vs Depth at Different Time Steps', fontweight='bold', fontsize=13)
+ax.set_ylim([-0.05, 1.05])
+ax.grid(True, alpha=0.3, linestyle='--')
+ax.legend(loc='best', fontsize=10, framealpha=0.9)
+plt.tight_layout()
+plt.show()
+

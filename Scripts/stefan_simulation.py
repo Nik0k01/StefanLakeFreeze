@@ -86,7 +86,7 @@ def setUpMesh(nodes_x, nodes_y, length, formfunction, shape):
 
 
 class StefanSimulation:
-    def __init__(self, X, Y, initial_temp, time_step, steps_no, q):
+    def __init__(self, X, Y, initial_temp, time_step, steps_no, q, fl_field_init):
         self.X = X
         self.Y = Y
         self.dt = time_step
@@ -98,13 +98,13 @@ class StefanSimulation:
         # self.cell_areas = np.ones(X.shape) * dx * dy
 
         self.T_field = initial_temp.copy()
-        self.fl_field = FlField(X, Y)
+        self.fl_field = FlField(X, Y, fl_field_init)
         self.enthalpy_field = self.calculate_enthalpy(self.T_field)
         self.velocity_field = velocityField(X, Y, dt=self.dt)
         
-        self.boundary = ['N', 'N', 'N', 'N']
+        self.boundary = ['D', 'N', 'N', 'N']
         self.fvm_solver = FVMSolver(X, Y, boundary=self.boundary, 
-                                     TD=[0, 0, 0, 0], q=q, alpha=1.0, 
+                                     TD=[257.15, 0, 0, 0], q=q, alpha=1.0, 
                                      Tinf=273.15, conductivity=np.ones(X.shape)*0.560,
                                      velocity_field=self.velocity_field.velocity_field,
                                      rho_field=np.ones(X.shape)*1000,
@@ -143,31 +143,34 @@ class StefanSimulation:
     def fl_correction(self, T_current, fl_field_guess):
         """
         Correction of the phase field based on the temperature field.
-        
-        :param self: Description
-        :param T_field: 2D numpy array of temperature values
         """
-        cp_l = 4200.0
-        cp_s = 2100.0  # Make sure this matches your simulation setup
+        cp_l = 4181.0
+        cp_s = 2090.0  
         Lf = 334000.0
+        
+        # Calculate effective Cp based on current guess
         cp_eff = fl_field_guess * cp_l + (1.0 - fl_field_guess) * cp_s
         
-        if np.any(T_current < 273.15):
-            # Calculate change in temperature
-            delta_T = T_current - 273.15
-            # Check where is liquid
-            liquid_mask = fl_field_guess > 0.0
-            # Calculate change in liquid fraction
-            delta_fl = cp_eff * delta_T / Lf
-            # If liquid fraction increases, skip - we only freeze
-            delta_fl = np.where(delta_fl < 0.0, delta_fl, 0.0)
-            # If temperature is above melting, skip
-            delta_fl = np.where(T_current < 273.15, delta_fl, 0.0)
-            # Only update where there is liquid
-            delta_fl[~liquid_mask] = 0.0
-            return np.clip(fl_field_guess + delta_fl, 0.0, 1.0)
-        else:
-            return fl_field_guess.copy()
+        # Calculate temperature deviation from melting point
+        delta_T = T_current - 273.15
+        
+        # Calculate required change in liquid fraction to absorb/release this heat
+        # dH = rho * L * dfl  approx  rho * cp * dT
+        # Therefore: dfl = (cp * dT) / L
+        # Note: This is an approximation for the iterative update
+        delta_fl = cp_eff * delta_T / Lf
+        
+        # REMOVED: The constraints that forced delta_fl < 0
+        # We allow delta_fl to be positive (melting) to correct numerical overshoots
+        
+        # Only update physically meaningful cells (e.g. within [0,1])
+        # But usually, just clipping the result is sufficient.
+        
+        # Apply the change
+        fl_new = fl_field_guess + delta_fl
+        
+        # Hard Clip to [0, 1] acts as the ultimate physical constraint
+        return np.clip(fl_new, 0.0, 1.0)
     
     def update_material_properties(self, fl_guess):
         """
@@ -214,12 +217,13 @@ class StefanSimulation:
             # 2. Initialize guess for the new field
             # Start by assuming nothing changes (or use last step's rate)
             fl_field_current_guess = fl_field_old.copy()
+            self.update_material_properties(fl_field_current_guess)
             rho_cp_old_step = self.fvm_solver.convFVM.rho * self.fvm_solver.convFVM.cp
             
             converged = False
             iteration = 0
             max_iterations = 100 # usually converges fast
-            tolerance = 1e-12
+            tolerance = 1e-6
 
             while not converged and iteration < max_iterations:
                 
@@ -239,7 +243,8 @@ class StefanSimulation:
                 # Update Velocity Field based on current phase guess
                 self.velocity_field.velocity_field = self.velocity_field.generate_velocity_field(
                     fl_field_old,
-                    fl_field_current_guess
+                    fl_field_current_guess,
+                    self.fvm_solver.convFVM.rho
                 )
                 T_initial_conservative = self.T_field * (rho_cp_old_step / rho_cp_new_iter)       
                 # --- STEP B: Solve Temperature ---
@@ -261,19 +266,18 @@ class StefanSimulation:
                 fl_previous_guess = fl_field_current_guess.copy()
                 fl_field_current_guess = self.fl_correction(current_T_field, fl_previous_guess)
                
+                # Don't just swap them; use under-relaxation to prevent oscillations
+                # f_new = f_old + omega * (f_calc - f_old)
+                relax = 0.5
+                fl_field_current_guess = fl_field_old + relax * (fl_field_current_guess - fl_field_old)
+
                          
                 # --- STEP D: Check Convergence ---
                 # Did our guess match the result?
-                diff = np.max(np.abs(fl_field_old - fl_field_current_guess))
+                diff = np.max(np.abs(fl_previous_guess - fl_field_current_guess))
                 if diff < tolerance:
                     converged = True
-                
-                # --- STEP E: Update Guess for next iteration ---
-                # Don't just swap them; use under-relaxation to prevent oscillations
-                # f_new = f_old + omega * (f_calc - f_old)
-                relax = 0.2 
-                fl_field_current_guess = fl_field_old + relax * (fl_field_current_guess - fl_field_old)
-                
+                                                
                 self.fvm_solver.B = 0.0 # Reset the LHS for next iteration
                 
                 iteration += 1
@@ -451,13 +455,20 @@ if __name__ == "__main__":
     # Example usage
     Lx, Ly = 0.1, 0.1
     shape =  'rectangular'
-    dimX, dimY = 4, 4
-    q = [-2000, 0, 0, 0]
+    dimX, dimY = 3, 256
+    q = [0, 0, 0, 0]
     X, Y = setUpMesh(dimX, dimY, Lx, formfunction, shape)    
-    initial_temp = np.ones((dimY, dimX)) * 273.15 + 0.1  # Initial temperature field (in Kelvin)
-    time_step = 1  # seconds
+    initial_temp = np.ones((dimY, dimX)) * 273.15 # Initial temperature field (in Kelvin)
+    number_of_frozen_cells = int(0.01 / (Ly / dimY))  # 1 cm of ice
+    initial_temp = np.ones((dimY, dimX)) * 273.15
+    initial_temp[number_of_frozen_cells:, :] += 0.1
+    initial_temp[:number_of_frozen_cells, :] -= 1
+    initial_temp[0, :] = 257.15  # Set bottom boundary to -20C
+    fl_field_init = np.ones((dimY, dimX))
+    fl_field_init[:number_of_frozen_cells,:] = 0.0
+    time_step = 10  # seconds
     steps_no = 100    # number of time steps to simulate
 
-    simulation = StefanSimulation(X, Y, initial_temp, time_step, steps_no, q)
+    simulation = StefanSimulation(X, Y, initial_temp, time_step, steps_no, q, fl_field_init)
     simulation.run()
     simulation.animate_field(interval=200, filename='stefan_simulation.mp4')

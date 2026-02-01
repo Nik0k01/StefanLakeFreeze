@@ -5,7 +5,7 @@ from Scripts.fvm_solver import Coordinate2D
 
 class velocityField():
 
-    def __init__(self, X, Y, rho_l=1000, rho_s=981, dt=0.1):
+    def __init__(self, X, Y, rho_l=1000, rho_s=917, dt=0.1):
         # X, Y is the mesh
         # boundary conditions - wall at the top, no flow on the sides, open at the bottom
         # flFieldOld - liquid fraction field at previous time step
@@ -75,10 +75,10 @@ class velocityField():
         return i * self.n + j
    
 
-    def generate_velocity_field(self, flFieldOld, flFieldNew):
+    def generate_velocity_field(self, flFieldOld, flFieldNew, rho_field):
         # Generate a velocity field based on the liquid fraction fields
         dtflField = (flFieldNew - flFieldOld) / self.dt               # Time derivative of liquid fraction
-        source_term = -(self.rho_s - self.rho_l) / self.rho_l * dtflField        # Source term due to phase change
+        source_term = -(self.rho_s - self.rho_l) / rho_field * dtflField        # Source term due to phase change
         for i in range(self.m): # Starting from the top
             for j in range(self.n): # Starting from the left
                 area_cell, dx_n, dx_s = self.choose_node(i, j)
