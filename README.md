@@ -76,15 +76,19 @@ from Scripts.stefan_simulation import StefanSimulation
 # Initialize and run simulation
 sim = StefanSimulation()
 sim.run()
-sim.visualize()
+```
+
+After writing your script run from the terminal:
+```bash
+python -m Scripts.myScript
 ```
 
 ### Running Tests
 
 ```bash
-python Tests/stefanTemperature.py
-python Tests/stefanEnergy.py
-python Tests/interfaceTracking.py
+python -m Tests.stefanTemperature
+python -m Tests.stefanEnergy
+python -m Tests.interfaceTracking
 ```
 
 ### Interactive Notebook
